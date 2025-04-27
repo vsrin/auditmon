@@ -54,7 +54,8 @@ import {
   clearSelectedSubmission
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
-import ModeSwitcher from '../core/ModeSwitcher';
+import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
+import { SubmissionDetail as SubmissionDetailType } from '../../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -82,88 +83,89 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-// Define interface for compliance check object
-interface ComplianceCheck {
-  checkId: string;
-  category: string;
-  status: string;
-  timestamp: string;
-  findings: string;
-  dataPoints: Record<string, any>;
-}
-
-// Define interface for document object
-interface Document {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  size: number;
-}
-
-// Define interface for submission detail object
-interface SubmissionDetail {
-  submissionId: string;
-  status: string;
-  timestamp: string;
-  broker: {
-    name: string;
-    email?: string;
-  };
-  insured: {
-    name: string;
-    industry: {
-      code: string;
-      description: string;
-    };
-    address: {
-      street: string;
-      city: string;
-      state: string;
-      zip: string;
-    };
-    yearsInBusiness?: number;
-    employeeCount?: number;
-  };
-  coverage: {
-    lines: string[];
-    effectiveDate: string;
-    expirationDate: string;
-  };
-  documents: Document[];
-  complianceChecks: ComplianceCheck[];
-}
-
 const SubmissionDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { selectedSubmission, loading, error } = useSelector((state: RootState) => state.submissions);
-  const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
+  const { isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl } = useSelector((state: RootState) => state.config);
   const [tabValue, setTabValue] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
 
-  // Configure API service based on current settings
+  // Configure API service and rule engine based on current settings
   useEffect(() => {
+    console.log("Config changed - isDemoMode:", isDemoMode, "apiEndpoint:", apiEndpoint);
+    console.log("Rule Engine Config - useRemote:", useRemoteRuleEngine, "apiUrl:", ruleEngineApiUrl);
+    
+    // Configure API service
     apiService.setDemoMode(isDemoMode);
     apiService.setApiEndpoint(apiEndpoint);
-  }, [isDemoMode, apiEndpoint]);
+    
+    // Configure rule engine provider
+    ruleEngineProvider.configure(useRemoteRuleEngine, ruleEngineApiUrl);
+  }, [isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl]);
 
   // Load submission detail
   useEffect(() => {
     if (!id) return;
+    console.log("Loading submission detail for ID:", id);
+    console.log("Using Demo Mode:", isDemoMode);
+    console.log("Using Remote Rule Engine:", useRemoteRuleEngine);
 
     const loadSubmissionDetail = async () => {
       dispatch(fetchSubmissionDetailStart());
       try {
-        const data = await apiService.getSubmissionDetail(id);
-        dispatch(fetchSubmissionDetailSuccess(data));
+        console.log("Fetching submission data from API service...");
+        let data = await apiService.getSubmissionDetail(id);
+        console.log("Submission data received:", data);
+        
+        // In demo mode, we already have the compliance checks from mock data
+        if (isDemoMode) {
+          console.log("Using demo mode data with mock compliance checks");
+          console.log("Mock data compliance checks:", data.complianceChecks);
+          dispatch(fetchSubmissionDetailSuccess(data));
+        } else {
+          // In live mode, we need to process the data and use the rule engine
+          console.log("Processing live mode data");
+          
+          // For live mode, ensure we have proper compliance checks
+          // Initialize empty array if not present
+          if (!data.complianceChecks) {
+            data.complianceChecks = [];
+          }
+          
+          // Type assertion to ensure it's in our format
+          const typedData = data as SubmissionDetailType;
+            
+          // Call rule engine to evaluate submission
+          try {
+            console.log("Evaluating submission with rule engine");
+            const evaluationResult = await ruleEngineProvider.evaluateSubmission(typedData);
+            
+            console.log("Rule engine evaluation result:", evaluationResult);
+            
+            // Add compliance checks to the submission data
+            typedData.complianceChecks = evaluationResult.checks || [];
+            typedData.status = evaluationResult.overallStatus || typedData.status;
+            
+            console.log("Updated submission with checks:", 
+              `Count: ${typedData.complianceChecks.length}`, 
+              `Status: ${typedData.status}`);
+          } catch (ruleError) {
+            console.error("Error evaluating submission with rule engine:", ruleError);
+            console.error("Error stack:", ruleError instanceof Error ? ruleError.stack : "No stack trace");
+            // If rule evaluation fails, keep empty compliance checks
+          }
+          
+          dispatch(fetchSubmissionDetailSuccess(typedData));
+        }
 
         // Set first document as selected if available
         if (data.documents && data.documents.length > 0) {
           setSelectedDocument(data.documents[0].id);
         }
       } catch (err) {
+        console.error("Error loading submission detail:", err);
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
         dispatch(fetchSubmissionDetailFailure(errorMessage));
       }
@@ -173,9 +175,10 @@ const SubmissionDetail: React.FC = () => {
 
     // Clean up when component unmounts
     return () => {
+      console.log("Cleaning up - clearing selected submission");
       dispatch(clearSelectedSubmission());
     };
-  }, [dispatch, id, isDemoMode]);
+  }, [dispatch, id, isDemoMode, useRemoteRuleEngine]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -240,6 +243,10 @@ const SubmissionDetail: React.FC = () => {
   const getSubmissionStatus = () => selectedSubmission?.status || 'Unknown';
   const getSubmissionBrokerName = () => selectedSubmission?.broker?.name || 'Unknown Broker';
   const getSubmissionTimestamp = () => selectedSubmission?.timestamp || new Date().toISOString();
+
+  // Debug current state
+  console.log("Current submission state:", selectedSubmission);
+  console.log("Compliance checks:", selectedSubmission?.complianceChecks);
 
   return (
     <div>

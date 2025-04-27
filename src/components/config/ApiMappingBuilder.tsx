@@ -1,28 +1,22 @@
 // src/components/config/ApiMappingBuilder.tsx
-import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Typography,
-  Button,
-  CircularProgress,
-  Alert,
-  Card,
-  CardContent,
-  CardHeader,
-  Accordion,
-  AccordionSummary,
+import React, { useState } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Accordion, 
+  AccordionSummary, 
   AccordionDetails,
-  TextField
+  List,
+  ListItem,
+  ListItemText,
+  Divider
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SaveIcon from '@mui/icons-material/Save';
-import FieldMapper from './FieldMapper';
-import { RootState } from '../../store';
-import { useSelector } from 'react-redux';
 
 // Define our application's required field structure
-const APP_FIELDS = {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const APP_FIELDS_DEFINITION = {
   submissionId: { label: 'Submission ID', required: true, type: 'string' },
   timestamp: { label: 'Timestamp', required: true, type: 'string' },
   status: { label: 'Status', required: true, type: 'string' },
@@ -70,206 +64,187 @@ const APP_FIELDS = {
       expirationDate: { label: 'Expiration Date', required: true, type: 'string' }
     }
   },
-  documents: { label: 'Documents', required: false, type: 'array' },
-  complianceChecks: { label: 'Compliance Checks', required: false, type: 'array' }
+  documents: { label: 'Documents', required: false, type: 'array' }
+  // Removed complianceChecks since these are generated internally
 };
 
-interface ApiMappingBuilderProps {
-  initialMapping: any;
-  onSave: (mapping: any) => void;
-}
+// This is the actual export that will be used by other components
+export const APP_FIELDS = APP_FIELDS_DEFINITION;
 
-const ApiMappingBuilder: React.FC<ApiMappingBuilderProps> = ({ initialMapping, onSave }) => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sampleResponse, setSampleResponse] = useState<any>(null);
-  const [apiFields, setApiFields] = useState<string[]>([]);
-  const [currentMapping, setCurrentMapping] = useState<any>(initialMapping || {});
-  const [testEndpoint, setTestEndpoint] = useState('');
-  
-  const { apiEndpoint } = useSelector((state: RootState) => state.config);
-  
-  // Fetch sample data from API
-  const fetchSampleData = async () => {
-    const endpoint = testEndpoint || apiEndpoint;
-    
-    if (!endpoint) {
-      setError('Please enter an API endpoint to test');
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Fetch a sample submission
-      const response = await fetch(`${endpoint}/submissions`);
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Take the first item if it's an array
-      const sampleData = Array.isArray(data) && data.length > 0 ? data[0] : data;
-      
-      setSampleResponse(sampleData);
-      
-      // Extract all possible field paths from the API response
-      const paths = extractPaths(sampleData);
-      setApiFields(paths);
-      
-      setLoading(false);
-    } catch (err) {
-      setLoading(false);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    }
-  };
-  
-  // Extract all possible field paths from a nested object
-  const extractPaths = (obj: any, parentPath: string = '', result: string[] = []): string[] => {
-    if (!obj || typeof obj !== 'object') {
-      return result;
-    }
-    
-    for (const key in obj) {
-      const path = parentPath ? `${parentPath}.${key}` : key;
-      result.push(path);
-      
-      if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-        extractPaths(obj[key], path, result);
-      }
-    }
-    
-    return result;
-  };
-  
-  // Handle field mapping change
-  const handleMappingChange = (appField: string, apiField: string) => {
-    setCurrentMapping((prev: any) => ({
-      ...prev,
-      [appField]: apiField
-    }));
-  };
-  
-  // Handle complex field mapping change (for nested objects)
-  const handleComplexMappingChange = (appField: string, fieldMapping: any) => {
-    setCurrentMapping((prev: any) => ({
-      ...prev,
-      [appField]: fieldMapping
-    }));
-  };
-  
-  // Save the mapping
-  const handleSave = () => {
-    onSave(currentMapping);
-  };
-  
-  // Get value from sample response using a path
-const getValueFromPath = (path: string): any => {
-    if (!sampleResponse || !path || typeof path !== 'string') return null;
-    
-    const parts = path.split('.');
-    let value = sampleResponse;
-    
-    for (const part of parts) {
-      if (value === undefined || value === null) return null;
-      value = value[part];
-    }
-    
-    return value;
-  };
-  
+// Helper component to display the field structure recursively
+const FieldTree: React.FC<{ 
+  fields: Record<string, any>; 
+  level?: number;
+  showRequired?: boolean;
+}> = ({ fields, level = 0, showRequired = true }) => {
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        API Mapping Builder
+    <List dense disablePadding sx={{ pl: level * 2 }}>
+      {Object.entries(fields).map(([key, value]: [string, any]) => (
+        <React.Fragment key={key}>
+          <ListItem disablePadding sx={{ pt: 0.5, pb: 0.5 }}>
+            <ListItemText
+              primary={
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Typography variant={level === 0 ? 'subtitle1' : 'body2'} component="span">
+                    <strong>{value.label || key}</strong>
+                  </Typography>
+                  {showRequired && value.required && (
+                    <Typography component="span" color="error" sx={{ ml: 0.5 }}>
+                      *
+                    </Typography>
+                  )}
+                  {value.type && (
+                    <Typography component="span" color="text.secondary" sx={{ ml: 1 }} variant="caption">
+                      ({value.type})
+                    </Typography>
+                  )}
+                </Box>
+              }
+            />
+          </ListItem>
+          {value.fields && (
+            <FieldTree fields={value.fields} level={level + 1} showRequired={showRequired} />
+          )}
+        </React.Fragment>
+      ))}
+    </List>
+  );
+};
+
+// API Mapping Builder component
+const ApiMappingBuilder: React.FC = () => {
+  const [expandedSection, setExpandedSection] = useState<string | false>('fieldStructure');
+
+  const handleChange = (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
+    setExpandedSection(isExpanded ? panel : false);
+  };
+
+  // Example API-to-Dashboard field mapping
+  const exampleMapping = {
+    submissionId: "submission.id",
+    timestamp: "submission.created_at",
+    status: "status",
+    broker: {
+      name: "broker.company_name",
+      email: "broker.email_address"
+    },
+    insured: {
+      name: "insured.legal_name",
+      industry: {
+        code: "insured.sic_code",
+        description: "insured.industry_description"
+      },
+      address: {
+        street: "insured.address.line1",
+        city: "insured.address.city",
+        state: "insured.address.state",
+        zip: "insured.address.postal_code"
+      },
+      yearsInBusiness: "insured.years_in_business",
+      employeeCount: "insured.employee_count"
+    },
+    coverage: {
+      lines: "submission.coverage_lines",
+      effectiveDate: "submission.effective_date",
+      expirationDate: "submission.expiration_date"
+    },
+    documents: "documents"
+  };
+
+  return (
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom>
+        API Mapping Reference
       </Typography>
       
-      <Card sx={{ mb: 3 }}>
-        <CardHeader title="Test API Connection" />
-        <CardContent>
-          <Box sx={{ mb: 2 }}>
-            <TextField
-              fullWidth
-              label="Test API Endpoint"
-              placeholder={apiEndpoint || "Enter API endpoint to test"}
-              value={testEndpoint}
-              onChange={(e) => setTestEndpoint(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={fetchSampleData}
-              startIcon={loading ? <CircularProgress size={20} /> : <RefreshIcon />}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Fetch Sample Data'}
-            </Button>
-          </Box>
-          
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
-          )}
-          
-          {sampleResponse && (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              Successfully fetched sample data. {apiFields.length} fields discovered.
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+      <Typography variant="body2" paragraph>
+        This component provides reference information about our API mapping structure. 
+        Required fields are marked with an asterisk (*).
+      </Typography>
       
-      {sampleResponse && (
-        <>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Field Mapping
-            </Typography>
-            <Typography variant="body2" gutterBottom>
-              Map fields from your API to the audit application's required fields.
-            </Typography>
-            
-            {/* Render field mappers for all required app fields */}
-            <FieldMapper 
-              appFields={APP_FIELDS}
-              apiFields={apiFields}
-              currentMapping={currentMapping}
-              onChange={handleMappingChange}
-              onComplexChange={handleComplexMappingChange}
-              getValueFromPath={getValueFromPath}
-            />
-          </Box>
+      <Typography variant="body2" paragraph color="error">
+        Note: Compliance checks are now generated by the rule engine and should not be mapped from the API.
+      </Typography>
+      
+      <Accordion 
+        expanded={expandedSection === 'fieldStructure'} 
+        onChange={handleChange('fieldStructure')}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="subtitle1">Dashboard Field Structure</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant="body2" paragraph>
+            These are the fields needed by the dashboard application:
+          </Typography>
+          <FieldTree fields={APP_FIELDS} />
+        </AccordionDetails>
+      </Accordion>
+      
+      <Accordion 
+        expanded={expandedSection === 'exampleMapping'} 
+        onChange={handleChange('exampleMapping')}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="subtitle1">Example API Mapping</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant="body2" paragraph>
+            This is an example of how to map API fields to dashboard fields:
+          </Typography>
           
-          <Box sx={{ mb: 3 }}>
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography>Preview Generated Mapping</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                  {JSON.stringify(currentMapping, null, 2)}
-                </Typography>
-              </AccordionDetails>
-            </Accordion>
+          <Box sx={{ 
+            backgroundColor: '#f5f5f5', 
+            p: 2, 
+            borderRadius: 1, 
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {JSON.stringify(exampleMapping, null, 2)}
           </Box>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleSave}
-              startIcon={<SaveIcon />}
-            >
-              Save Mapping
-            </Button>
-          </Box>
-        </>
-      )}
-    </Box>
+        </AccordionDetails>
+      </Accordion>
+      
+      <Accordion 
+        expanded={expandedSection === 'mappingRules'} 
+        onChange={handleChange('mappingRules')}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="subtitle1">Mapping Rules</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <List>
+            <ListItem>
+              <ListItemText 
+                primary="Dot Notation" 
+                secondary="Use dot notation to navigate nested fields, e.g., 'insured.address.city'" 
+              />
+            </ListItem>
+            <Divider />
+            <ListItem>
+              <ListItemText 
+                primary="Nested Objects" 
+                secondary="For complex object mappings, define a nested mapping object" 
+              />
+            </ListItem>
+            <Divider />
+            <ListItem>
+              <ListItemText 
+                primary="Arrays" 
+                secondary="Arrays are mapped directly from the source" 
+              />
+            </ListItem>
+            <Divider />
+            <ListItem>
+              <ListItemText 
+                primary="Compliance Checks" 
+                secondary="These are generated by the rule engine and should not be mapped" 
+              />
+            </ListItem>
+          </List>
+        </AccordionDetails>
+      </Accordion>
+    </Paper>
   );
 };
 

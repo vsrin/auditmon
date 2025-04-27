@@ -1,69 +1,99 @@
 // src/types/index.ts
-export interface Broker {
+
+// Document interface
+export interface Document {
+  id: string;
+  name: string;
+  type: string;
+  contentType?: string;
+  size: number;
+  status: string;
+}
+
+// ComplianceCheck interface
+export interface ComplianceCheckResult {
+  checkId: string;
+  category: string;
+  status: string;
+  timestamp: string;
+  findings: string;
+  dataPoints: Record<string, any>;
+}
+
+// Basic submission data interface
+export interface SubmissionData {
+  submissionId: string;
+  timestamp: string;
+  broker: {
     name: string;
-    email: string;
-  }
-  
-  export interface Industry {
-    code: string;
-    description: string;
-  }
-  
-  export interface Address {
-    street: string;
-    city: string;
-    state: string;
-    zip: string;
-  }
-  
-  export interface Insured {
+    email?: string;
+  };
+  insured: {
     name: string;
-    industry: Industry;
-    address: Address;
+    industry: {
+      code: string;
+      description: string;
+    };
+    address: {
+      street: string;
+      city: string;
+      state: string;
+      zip: string;
+    };
     yearsInBusiness?: number;
     employeeCount?: number;
-  }
-  
-  export interface Coverage {
+  };
+  coverage: {
     lines: string[];
     effectiveDate: string;
     expirationDate: string;
-  }
-  
-  export interface Document {
-    id: string;
-    name: string;
-    type: string;
-    contentType: string;
-    size: number;
-    status: 'processed' | 'pending' | 'failed';
-    extractedData?: Record<string, any>;
-  }
-  
-  export interface ComplianceCheckResult {
-    checkId: string;
-    category: string;
-    status: 'compliant' | 'attention' | 'non-compliant';
-    findings: string;
-    timestamp: string;
-    dataPoints: Record<string, any>;
-  }
-  
-  export interface SubmissionData {
-    submissionId: string;
-    timestamp: string;
-    broker: Broker;
-    insured: Insured;
-    coverage: Coverage;
-    exposure: Record<string, any>;
-    documents: Document[];
-    status: string;
-  }
-  
-  export interface SubmissionDetail extends SubmissionData {
-    complianceChecks: ComplianceCheckResult[];
-    financialAnalysis?: Record<string, any>;
-    lossHistory?: Record<string, any>;
-  }
-  
-  export type ComplianceStatus = 'compliant' | 'attention' | 'non-compliant';
+  };
+  exposure?: {
+    property?: {
+      tiv: number;
+      locationsCount: number;
+    };
+    generalLiability?: {
+      limits: {
+        eachOccurrence: number;
+        generalAggregate: number;
+      };
+    };
+  };
+  documents: Document[];
+  status: string;
+}
+
+// Full submission detail interface
+export interface SubmissionDetail extends SubmissionData {
+  complianceChecks: ComplianceCheckResult[];
+}
+
+// Config state interface
+export interface ConfigState {
+  isDemoMode: boolean;
+  apiEndpoint: string;
+  apiMapping: Record<string, any>;
+  useRemoteRuleEngine: boolean;
+  ruleEngineApiUrl: string;
+}
+
+// Submissions state interface
+export interface SubmissionsState {
+  submissions: SubmissionData[];
+  selectedSubmission: SubmissionDetail | null;
+  loading: boolean;
+  error: string | null;
+}
+
+// Root state interface for Redux
+export interface RootState {
+  config: ConfigState;
+  submissions: SubmissionsState;
+}
+
+// API response interface for handling external API responses
+export interface ApiResponseData {
+  [key: string]: any;
+  compliance_checks?: any[];
+}

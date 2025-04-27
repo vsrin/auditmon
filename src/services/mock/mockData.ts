@@ -136,7 +136,7 @@ export const mockSubmissions: SubmissionData[] = [
         status: 'processed'
       }
     ],
-    status: 'Requires Attention'
+    status: 'At Risk'
   },
   // Add the tech company submission
   {

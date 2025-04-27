@@ -1,57 +1,29 @@
 // src/services/api/apiService.ts
+import axios from 'axios';
 import { mockSubmissions, getMockSubmissionDetail } from '../mock/mockData';
+import { SubmissionData, SubmissionDetail } from '../../types';
 
 class ApiService {
-  private isDemoMode: boolean = true;
+  private isDemoMode: boolean = false;
   private apiEndpoint: string = '';
-  private apiMapping: any = null;
-
-  constructor() {
-    // Initialize from localStorage if available
-    try {
-      const savedDemoMode = localStorage.getItem('isDemoMode');
-      const savedApiEndpoint = localStorage.getItem('apiEndpoint');
-      const savedApiMapping = localStorage.getItem('apiMapping');
-      
-      if (savedDemoMode) {
-        this.isDemoMode = JSON.parse(savedDemoMode);
-      }
-      
-      if (savedApiEndpoint) {
-        this.apiEndpoint = savedApiEndpoint;
-      }
-      
-      if (savedApiMapping) {
-        this.apiMapping = JSON.parse(savedApiMapping);
-      }
-    } catch (e) {
-      console.error('Error initializing API service from localStorage', e);
-    }
-  }
 
   setDemoMode(mode: boolean): void {
     this.isDemoMode = mode;
-    localStorage.setItem('isDemoMode', JSON.stringify(mode));
   }
 
   setApiEndpoint(endpoint: string): void {
     this.apiEndpoint = endpoint;
-    localStorage.setItem('apiEndpoint', endpoint);
   }
 
-  setApiMapping(mapping: any): void {
-    this.apiMapping = mapping;
-    localStorage.setItem('apiMapping', JSON.stringify(mapping));
-  }
-
-  // Apply mapping to transform API response to our data model
-  private applyMapping(data: any, mapping: any): any {
+  private applyMapping(data: any, mapping: Record<string, any>): any {
     if (!mapping || !data) return data;
     
-    // Simple field mapping for now
     const result: any = {};
     
     for (const [key, path] of Object.entries(mapping)) {
+      // Skip compliance checks as we handle them separately
+      if (key === 'complianceChecks') continue;
+      
       if (typeof path === 'string') {
         // Handle nested paths like "insured.name"
         const parts = path.split('.');
@@ -72,99 +44,155 @@ class ApiService {
     return result;
   }
 
-  async getSubmissions(): Promise<any[]> {
+  async getSubmissions(): Promise<SubmissionData[]> {
     if (this.isDemoMode) {
-      return Promise.resolve(mockSubmissions);
+      return mockSubmissions;
     }
-    
+
     try {
-      // Log the URL being used for debugging
-      console.log(`Fetching submissions from: ${this.apiEndpoint}/submissions`);
-      
-      const response = await fetch(`${this.apiEndpoint}/submissions`, {
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        console.error(`API error: ${response.status} - ${response.statusText}`);
-        throw new Error(`API error: ${response.status} - ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('API response:', data);
-      
-      // If we have mapping, apply it to each submission
-      if (this.apiMapping) {
-        return data.map((item: any) => this.applyMapping(item, this.apiMapping));
-      }
-      
-      return data;
+      const response = await axios.get(`${this.apiEndpoint}/api/submissions`);
+      return response.data.map((item: any) => this.mapFlaskApiResponseToSubmission(item));
     } catch (error) {
       console.error('Error fetching submissions:', error);
-      // Add more detailed error info
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.error('This may be a CORS or network connectivity issue.');
-        console.error('Check that your Flask server is running and accessible.');
-        console.error('Verify API endpoint URL is correct:', this.apiEndpoint);
-      }
       throw error;
     }
   }
 
-  async getSubmissionDetail(id: string): Promise<any> {
+  async getSubmissionDetail(id: string): Promise<SubmissionDetail> {
     if (this.isDemoMode) {
-      // Use the getMockSubmissionDetail function if it exists, or fall back to finding in mockSubmissions
-      if (typeof getMockSubmissionDetail === 'function') {
-        return Promise.resolve(getMockSubmissionDetail(id));
+      // In demo mode, we want to use the mock data directly with compliance checks
+      const submissionDetail = getMockSubmissionDetail(id);
+      if (!submissionDetail) {
+        throw new Error(`Submission with ID ${id} not found`);
       }
-      
-      return Promise.resolve(
-        mockSubmissions.find((sub: any) => sub.submissionId === id) || mockSubmissions[0]
-      );
+      return submissionDetail; // Return the mock data with compliance checks included
     }
-    
+
     try {
-      // Log the URL being used for debugging
-      console.log(`Fetching submission details from: ${this.apiEndpoint}/submissions/${id}`);
-      
-      const response = await fetch(`${this.apiEndpoint}/submissions/${id}`, {
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        console.error(`API error: ${response.status} - ${response.statusText}`);
-        throw new Error(`API error: ${response.status} - ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('API response for submission detail:', data);
-      
-      // Apply mapping if available
-      if (this.apiMapping) {
-        return this.applyMapping(data, this.apiMapping);
-      }
-      
-      return data;
+      // Live mode - get data from API
+      const response = await axios.get(`${this.apiEndpoint}/api/submissions/${id}`);
+      return this.mapFlaskApiResponseToSubmission(response.data);
     } catch (error) {
-      console.error(`Error fetching submission ${id}:`, error);
-      // Add more detailed error info
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.error('This may be a CORS or network connectivity issue.');
-        console.error('Check that your Flask server is running and accessible.');
-        console.error('Verify API endpoint URL is correct:', this.apiEndpoint);
-      }
+      console.error(`Error fetching submission detail for ID ${id}:`, error);
       throw error;
     }
+  }
+
+  async getReports(): Promise<Record<string, any>> {
+    if (this.isDemoMode) {
+      // Create report data from mock submissions
+      return {
+        complianceStatus: {
+          compliant: mockSubmissions.filter(s => s.status === 'Compliant').length,
+          attention: mockSubmissions.filter(s => s.status === 'Requires Attention' || s.status === 'At Risk').length,
+          nonCompliant: mockSubmissions.filter(s => s.status === 'Non-Compliant').length
+        },
+        submissionTrends: {
+          labels: ['Jan', 'Feb', 'Mar', 'Apr'],
+          data: [12, 19, 15, 21]
+        }
+      };
+    }
+
+    try {
+      const submissions = await this.getSubmissions();
+      
+      // Generate report from live data
+      return {
+        complianceStatus: {
+          compliant: submissions.filter(s => s.status === 'Compliant').length,
+          attention: submissions.filter(s => s.status === 'At Risk').length,
+          nonCompliant: submissions.filter(s => s.status === 'Non-Compliant').length
+        },
+        submissionTrends: {
+          labels: ['Jan', 'Feb', 'Mar', 'Apr'],
+          data: [submissions.length, submissions.length - 2, submissions.length - 4, submissions.length - 1]
+        }
+      };
+    } catch (error) {
+      console.error('Error generating reports:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to map Flask API responses to our data model
+  private mapFlaskApiResponseToSubmission(apiData: any): SubmissionDetail {
+    // For submission list endpoint
+    if (apiData.submission) {
+      return {
+        submissionId: apiData.submission.id || 'Unknown',
+        timestamp: apiData.submission.created_at || new Date().toISOString(),
+        status: apiData.status || 'Unknown',
+        broker: {
+          name: apiData.broker.company_name || 'Unknown Broker',
+          email: apiData.broker.email_address || '',
+        },
+        insured: {
+          name: apiData.insured.legal_name || 'Unknown Insured',
+          industry: {
+            code: apiData.insured.sic_code || 'Unknown',
+            description: apiData.insured.industry_description || 'Unknown Industry',
+          },
+          address: {
+            street: apiData.insured.address.line1 || '',
+            city: apiData.insured.address.city || '',
+            state: apiData.insured.address.state || '',
+            zip: apiData.insured.address.postal_code || '',
+          },
+          yearsInBusiness: apiData.insured.years_in_business || 0,
+          employeeCount: apiData.insured.employee_count || 0,
+        },
+        coverage: {
+          lines: apiData.submission.coverage_lines || [],
+          effectiveDate: apiData.submission.effective_date || '',
+          expirationDate: apiData.submission.expiration_date || '',
+        },
+        documents: (apiData.documents || []).map((doc: any) => ({
+          id: doc.doc_id || Math.random().toString(),
+          name: doc.name || 'Unknown Document',
+          type: doc.type || 'Unknown Type',
+          status: doc.status?.toLowerCase() || 'unknown',
+          size: doc.size_kb || 0,
+        })),
+        complianceChecks: [] // Initialize empty, will be populated by rule engine
+      };
+    }
+    
+    // For submission list items
+    return {
+      submissionId: apiData.submission?.id || 'Unknown',
+      timestamp: apiData.submission?.created_at || new Date().toISOString(),
+      status: apiData.status || 'Unknown',
+      broker: {
+        name: apiData.broker?.company_name || 'Unknown Broker',
+        email: apiData.broker?.email_address || '',
+      },
+      insured: {
+        name: apiData.insured?.legal_name || 'Unknown Insured',
+        industry: {
+          code: apiData.insured?.sic_code || 'Unknown',
+          description: apiData.insured?.industry_description || 'Unknown Industry',
+        },
+        address: {
+          street: apiData.insured?.address?.line1 || '',
+          city: apiData.insured?.address?.city || '',
+          state: apiData.insured?.address?.state || '',
+          zip: apiData.insured?.address?.postal_code || '',
+        },
+        yearsInBusiness: apiData.insured?.years_in_business || 0,
+        employeeCount: apiData.insured?.employee_count || 0,
+      },
+      coverage: {
+        lines: apiData.submission?.coverage_lines || [],
+        effectiveDate: apiData.submission?.effective_date || '',
+        expirationDate: apiData.submission?.expiration_date || '',
+      },
+      documents: [],
+      complianceChecks: [] 
+    };
   }
 }
 
+// Export a singleton instance
 const apiService = new ApiService();
 export default apiService;

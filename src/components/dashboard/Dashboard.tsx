@@ -4,10 +4,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Typography,
   Card,
   CardContent,
-  CardHeader,
+  Typography,
+  Grid,
+  Paper,
+  styled,
   CircularProgress,
   Alert,
   Table,
@@ -16,431 +18,445 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Chip,
-  IconButton,
-  styled
+  Chip
 } from '@mui/material';
-import { 
-  Visibility as VisibilityIcon,
-  ArrowUpward as ArrowUpwardIcon,
-  ArrowDownward as ArrowDownwardIcon
-} from '@mui/icons-material';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { RootState } from '../../store';
 import {
-  fetchSubmissionsStart,
-  fetchSubmissionsSuccess,
-  fetchSubmissionsFailure
-} from '../../store/slices/submissionSlice';
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip
+} from 'recharts';
+import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
+import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
+import { SubmissionData } from '../../types';
+import AuditAlerts from './AuditAlerts'; // Import the new AuditAlerts component
 
 // Styled components for metrics cards
 const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
+  height: '100%',
   backgroundColor: bgcolor,
-  borderRadius: 8,
-  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  transition: 'transform 0.2s ease-in-out',
+  color: '#fff',
+  transition: 'transform 0.3s',
+  cursor: 'pointer',
   '&:hover': {
-    transform: 'translateY(-4px)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    transform: 'translateY(-5px)'
   }
 }));
 
-// Define types for our submission data
-interface SubmissionData {
-  submissionId: string;
-  status: string;
-  documents?: Array<{
-    id: string;
-    status: string;
-  }>;
-  complianceChecks?: Array<{
-    category: string;
-    status: string;
-  }>;
-  insured?: {
-    name: string;
-    industry?: {
-      description: string;
-    }
-  };
-  [key: string]: any;
-}
+// Colors for pie chart
+const COLORS = ['#4dabf5', '#66bb6a', '#ff9800', '#f44336'];
+
+// Label styling for pie chart
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+  index,
+  name
+}: any) => {
+  // Calculate positioning for label - move it further from the pie
+  const radius = outerRadius * 1.4; // Increase this value to move labels further
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  // Only render if the segment has a value (percent > 0)
+  if (percent === 0) return null;
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={COLORS[index % COLORS.length]}
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      fontWeight="bold"
+      fontSize="14"
+    >
+      {`${name} (${(percent * 100).toFixed(0)}%)`}
+    </text>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { submissions, loading, error } = useSelector((state: RootState) => state.submissions);
-  const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
+  const { isDemoMode } = useSelector((state: RootState) => state.config);
+  const { submissions } = useSelector((state: RootState) => state.submissions);
   
-  // State for metrics
-  const [metrics, setMetrics] = useState({
-    todayCount: 0,
-    todayChange: 0,
-    isIncrease: true,
-    compliantCount: 0,
-    compliantPercentage: 0,
-    atRiskCount: 0,
-    atRiskPercentage: 0
-  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<any>(null);
 
-  // State for audit control data
-  const [auditControlData, setAuditControlData] = useState([
-    { name: 'Documents Complete', value: 30, color: '#4285F4' },
-    { name: 'In Risk Appetite', value: 40, color: '#17af55' },
-    { name: 'Needs Financial Review', value: 20, color: '#FBBC05' },
-    { name: 'Loss History Issues', value: 10, color: '#EA4335' },
-  ]);
+  // Demo mode metrics - these should match exactly with what's displayed on the cards
+  const totalSubmissions = 42;
+  const compliantSubmissions = 28;
+  const atRiskSubmissions = 10;
+  const nonCompliantSubmissions = 4;
+  
+  // Audit alerts data
+  const auditAlerts = [
+    {
+      title: "Missing Financial Documents",
+      description: "5 submissions need financial statements",
+      color: "#fff3e0" // Light orange background
+    },
+    {
+      title: "Outside Risk Appetite",
+      description: "3 submissions in prohibited classes",
+      color: "#ffebee" // Light red background
+    }
+  ];
+  
+  const totalAlerts = 8; // Total number of alerts for "View all X alerts" text
 
-  // Configure API service based on current settings
   useEffect(() => {
-    apiService.setDemoMode(isDemoMode);
-    apiService.setApiEndpoint(apiEndpoint);
-  }, [isDemoMode, apiEndpoint]);
-
-  // Load submissions
-  useEffect(() => {
-    const loadSubmissions = async () => {
-      dispatch(fetchSubmissionsStart());
+    const loadDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
-        const data = await apiService.getSubmissions();
-        dispatch(fetchSubmissionsSuccess(data));
+        // Load reports data
+        const reports = await apiService.getReports();
+        setDashboardData(reports);
+        
+        // Load submissions data for the table
+        dispatch(fetchSubmissionsStart());
+        let submissionsData;
+        
+        if (isDemoMode) {
+          // In demo mode, generate synthetic data to match the metrics
+          submissionsData = generateSyntheticSubmissions();
+        } else {
+          // In live mode, fetch from API
+          submissionsData = await apiService.getSubmissions();
+        }
+        
+        dispatch(fetchSubmissionsSuccess(submissionsData));
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+        console.error('Error loading dashboard data:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        setError(errorMessage);
         dispatch(fetchSubmissionsFailure(errorMessage));
+      } finally {
+        setLoading(false);
       }
     };
 
-    loadSubmissions();
+    loadDashboardData();
   }, [dispatch, isDemoMode]);
 
-  // Calculate and update metrics when submissions change
-  useEffect(() => {
-    if (!submissions || submissions.length === 0) return;
+  // Generate synthetic submissions that match our metrics
+  const generateSyntheticSubmissions = (): SubmissionData[] => {
+    // Create company names for our synthetic data
+    const companies = [
+      { name: 'Acme Manufacturing Inc.', industry: 'Manufacturing' },
+      { name: 'TechNova Solutions', industry: 'Technology' },
+      { name: 'Retail Horizons Group', industry: 'Retail' },
+      { name: 'BuildRight Construction', industry: 'Construction' },
+      { name: 'HealthPlus Medical Services', industry: 'Healthcare' },
+      { name: 'TransGlobal Logistics', industry: 'Transportation' },
+      { name: 'EnergyWorks Utilities', industry: 'Energy' },
+      { name: 'FoodWise Distributors', industry: 'Food Services' },
+      { name: 'FinServe Banking Corp', industry: 'Financial Services' },
+      { name: 'Hospitality Suites Inc', industry: 'Hospitality' }
+    ];
+    
+    // Create an empty array for our submissions
+    const syntheticSubmissions: SubmissionData[] = [];
+    
+    // Helper to create a submission with specified status
+    const createSubmission = (status: string, index: number): SubmissionData => {
+      const company = companies[index % companies.length];
+      const today = new Date();
+      const submissionDate = new Date(today);
+      submissionDate.setDate(today.getDate() - (index % 30)); // Spread dates over last month
+      
+      return {
+        submissionId: `SUB${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+        timestamp: submissionDate.toISOString(),
+        broker: {
+          name: `Broker ${String.fromCharCode(65 + (index % 26))} Partners`,
+          email: `broker${index}@example.com`
+        },
+        insured: {
+          name: company.name,
+          industry: {
+            code: String(1000 + index),
+            description: company.industry
+          },
+          address: {
+            street: `${1000 + index} Business St`,
+            city: ['New York', 'Chicago', 'Los Angeles', 'Houston', 'Miami'][index % 5],
+            state: ['NY', 'IL', 'CA', 'TX', 'FL'][index % 5],
+            zip: String(10000 + (index * 100))
+          },
+          yearsInBusiness: 5 + (index % 20),
+          employeeCount: 50 + (index * 25)
+        },
+        coverage: {
+          lines: ['Property', 'General Liability', 'Workers Compensation'].slice(0, 1 + (index % 3)),
+          effectiveDate: new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString(),
+          expirationDate: new Date(today.getFullYear() + 1, today.getMonth() + 1, 1).toISOString()
+        },
+        documents: [
+          {
+            id: `doc-${index * 3 + 1}`,
+            name: 'Application.pdf',
+            type: 'application',
+            status: 'processed',
+            size: 250000 + (index * 1000)
+          },
+          {
+            id: `doc-${index * 3 + 2}`,
+            name: 'Loss Runs.pdf',
+            type: 'loss_runs',
+            status: 'processed',
+            size: 350000 + (index * 1000)
+          },
+          {
+            id: `doc-${index * 3 + 3}`,
+            name: 'Financial Statements.pdf',
+            type: 'financial',
+            status: 'processed',
+            size: 450000 + (index * 1000)
+          }
+        ],
+        status: status
+      };
+    };
+    
+    // Create compliant submissions
+    for (let i = 0; i < compliantSubmissions; i++) {
+      syntheticSubmissions.push(createSubmission('Compliant', i));
+    }
+    
+    // Create at-risk submissions
+    for (let i = 0; i < atRiskSubmissions; i++) {
+      syntheticSubmissions.push(createSubmission('At Risk', i + compliantSubmissions));
+    }
+    
+    // Create non-compliant submissions
+    for (let i = 0; i < nonCompliantSubmissions; i++) {
+      syntheticSubmissions.push(createSubmission('Non-Compliant', i + compliantSubmissions + atRiskSubmissions));
+    }
+    
+    return syntheticSubmissions;
+  };
 
-    // Type safety - cast submissions to our SubmissionData type
-    const typedSubmissions = submissions as SubmissionData[];
-    
-    // Count submissions by status
-    const compliantCount = typedSubmissions.filter(sub => 
-      sub.status.toLowerCase() === 'compliant').length;
-    
-    const atRiskCount = typedSubmissions.filter(sub => 
-      sub.status.toLowerCase() === 'at risk').length;
-    
-    // Calculate today's submissions (for demo, we'll just use all submissions)
-    const todayCount = typedSubmissions.length;
-    
-    // Calculate compliance percentages
-    const compliantPercentage = Math.round((compliantCount / todayCount) * 100);
-    const atRiskPercentage = Math.round((atRiskCount / todayCount) * 100);
-    
-    // Set fake change percentage (would come from API in real app)
-    const isIncrease = Math.random() > 0.5;
-    const todayChange = Math.round(Math.random() * 20);
-    
-    setMetrics({
-      todayCount,
-      todayChange,
-      isIncrease,
-      compliantCount,
-      compliantPercentage,
-      atRiskCount,
-      atRiskPercentage
-    });
+  // Sample audit control data - matches your screenshot
+  const auditControlData = [
+    { name: 'Documents Complete', value: 75 },
+    { name: 'In Risk Appetite', value: 25 },
+    { name: 'Loss History Issues', value: 0 },
+    { name: 'Needs Financial Review', value: 0 }
+  ];
 
-    // Update audit control data based on submissions
-    const docComplete = Math.round(typedSubmissions.filter(s => 
-      s.documents && s.documents.every(d => d.status === 'processed')).length / typedSubmissions.length * 100);
-    
-    const inRiskAppetite = Math.round(typedSubmissions.filter(s => 
-      s.status.toLowerCase() === 'compliant').length / typedSubmissions.length * 100);
-    
-    // Check for financial reviews with proper type safety
-    const needsFinancialReview = Math.round(typedSubmissions.filter(s => 
-      s.complianceChecks && s.complianceChecks.some((c: {category: string; status: string;}) => 
-        c.category.toLowerCase().includes('financial') && c.status.toLowerCase() !== 'compliant'
-      )).length / typedSubmissions.length * 100);
-    
-    const lossHistoryIssues = 100 - docComplete - inRiskAppetite - needsFinancialReview;
-    
-    setAuditControlData([
-      { name: 'Documents Complete', value: docComplete, color: '#4285F4' },
-      { name: 'In Risk Appetite', value: inRiskAppetite, color: '#17af55' },
-      { name: 'Needs Financial Review', value: needsFinancialReview, color: '#FBBC05' },
-      { name: 'Loss History Issues', value: Math.max(0, lossHistoryIssues), color: '#EA4335' },
-    ]);
+  // Handler for metric card clicks to navigate to filtered submissions
+  const handleMetricClick = (status: string) => {
+    if (status === 'all') {
+      navigate('/submissions');
+    } else {
+      navigate(`/submissions?status=${status}`);
+    }
+  };
+  
+  // Handler for "View all alerts" click
+  const handleViewAllAlertsClick = () => {
+    // Navigate to a page that shows all alerts (you'll need to create this route)
+    navigate('/alerts');
+  };
 
-  }, [submissions]);
-
-  // Recent submissions with today's date
-  const todayDate = new Date().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
-
-  // Get recent submissions from the full submissions list
-  const recentSubmissions = (submissions as SubmissionData[]).slice(0, 4).map(sub => ({
-    id: sub.submissionId,
-    insuredName: sub.insured?.name || 'Unknown',
-    industry: sub.insured?.industry?.description || 'Unknown',
-    dateReceived: todayDate,
-    status: sub.status
-  }));
-
-  // Status to color mapping
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'compliant':
-        return 'success';
-      case 'at risk':
-        return 'warning';
-      case 'non-compliant':
-        return 'error';
-      default:
-        return 'default';
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Invalid date';
     }
   };
 
-  const getStatusBgColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'compliant':
-        return '#E8F5E9'; // Light green background
-      case 'at risk':
-        return '#FFF3E0'; // Light orange background
-      default:
-        return 'transparent';
+  // Get status chip based on status text
+  const getStatusChip = (status: string) => {
+    const statusLower = status.toLowerCase();
+    if (statusLower === 'compliant') {
+      return <Chip label={status} color="success" size="small" />;
+    } else if (statusLower === 'at risk' || statusLower.includes('attention')) {
+      return <Chip label={status} color="warning" size="small" />;
+    } else if (statusLower === 'non-compliant') {
+      return <Chip label={status} color="error" size="small" />;
     }
+    return <Chip label={status} color="default" size="small" />;
   };
 
   return (
-    <div>
+    <Box>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Insurance Monitoring Dashboard
+      </Typography>
+      
       {loading && (
         <Box display="flex" justifyContent="center" my={4}>
           <CircularProgress />
         </Box>
       )}
-
+      
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
-
+      
       {!loading && !error && (
-        <Box sx={{ width: '100%' }}>
-          {/* Metrics Cards */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-            <MetricCard bgcolor="#E3F2FD" sx={{ flex: 1, minWidth: 240 }}>
-              <CardContent>
-                <Typography variant="subtitle1" color="text.secondary">
-                  Submissions Today
-                </Typography>
-                <Box display="flex" alignItems="baseline" mt={1}>
-                  <Typography variant="h3" component="div" fontWeight="bold" color="#1565C0">
-                    {metrics.todayCount}
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    color={metrics.isIncrease ? "success.main" : "error.main"} 
-                    ml={1} 
-                    display="flex" 
-                    alignItems="center"
-                  >
-                    {metrics.isIncrease ? (
-                      <ArrowUpwardIcon fontSize="small" />
-                    ) : (
-                      <ArrowDownwardIcon fontSize="small" />
-                    )}
-                    {metrics.todayChange}% vs yesterday
-                  </Typography>
-                </Box>
-              </CardContent>
-            </MetricCard>
+        <>
+          {/* Metrics Overview */}
+          <Grid container spacing={3} mb={4}>
+            <Grid item xs={12} md={3}>
+              <MetricCard bgcolor="#4dabf5" onClick={() => handleMetricClick('all')}>
+                <CardContent>
+                  <Typography variant="overline">Submissions</Typography>
+                  <Typography variant="h3">{totalSubmissions}</Typography>
+                  <Typography variant="body2">Active submissions</Typography>
+                </CardContent>
+              </MetricCard>
+            </Grid>
             
-            <MetricCard bgcolor="#E8F5E9" sx={{ flex: 1, minWidth: 240 }}>
-              <CardContent>
-                <Typography variant="subtitle1" color="text.secondary">
-                  Compliant Submissions
-                </Typography>
-                <Box display="flex" alignItems="baseline" mt={1}>
-                  <Typography variant="h3" component="div" fontWeight="bold" color="#17af55">
-                    {metrics.compliantCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" ml={1}>
-                    {metrics.compliantPercentage}% of total
-                  </Typography>
-                </Box>
-              </CardContent>
-            </MetricCard>
+            <Grid item xs={12} md={3}>
+              <MetricCard bgcolor="#66bb6a" onClick={() => handleMetricClick('Compliant')}>
+                <CardContent>
+                  <Typography variant="overline">Compliant</Typography>
+                  <Typography variant="h3">{compliantSubmissions}</Typography>
+                  <Typography variant="body2">Ready for underwriting</Typography>
+                </CardContent>
+              </MetricCard>
+            </Grid>
             
-            <MetricCard bgcolor="#FFF3E0" sx={{ flex: 1, minWidth: 240 }}>
-              <CardContent>
-                <Typography variant="subtitle1" color="text.secondary">
-                  At-Risk Submissions
-                </Typography>
-                <Box display="flex" alignItems="baseline" mt={1}>
-                  <Typography variant="h3" component="div" fontWeight="bold" color="#ED6C02">
-                    {metrics.atRiskCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" ml={1}>
-                    {metrics.atRiskPercentage}% of total
-                  </Typography>
-                </Box>
-              </CardContent>
-            </MetricCard>
-          </Box>
-
-          {/* Charts and Alerts Section */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-            {/* Audit Control Status */}
-            <Card sx={{ flex: 1, minWidth: 300, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-              <CardHeader title="Audit Control Status" />
-              <CardContent>
-                <Box sx={{ height: 200 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={auditControlData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={0}
-                        outerRadius={80}
-                        paddingAngle={0}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                        labelLine={false}
-                      >
-                        {auditControlData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => `${value}%`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Box>
-              </CardContent>
-            </Card>
+            <Grid item xs={12} md={3}>
+              <MetricCard bgcolor="#ff9800" onClick={() => handleMetricClick('At Risk')}>
+                <CardContent>
+                  <Typography variant="overline">At Risk</Typography>
+                  <Typography variant="h3">{atRiskSubmissions}</Typography>
+                  <Typography variant="body2">Need attention</Typography>
+                </CardContent>
+              </MetricCard>
+            </Grid>
             
-            {/* Audit Alerts */}
-            <Card sx={{ flex: 1, minWidth: 300, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-              <CardHeader title="Audit Alerts" />
-              <CardContent>
-                <Box sx={{ mb: 2, p: 2, bgcolor: '#FFF3E0', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" fontWeight="bold">
-                    Missing Financial Documents
-                  </Typography>
-                  <Typography variant="body2">
-                    {metrics.atRiskCount} submissions need financial statements
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ mb: 2, p: 2, bgcolor: '#FFEBEE', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" fontWeight="bold">
-                    Outside Risk Appetite
-                  </Typography>
-                  <Typography variant="body2">
-                    {Math.max(1, Math.floor(metrics.atRiskCount / 3))} submissions in prohibited classes
-                  </Typography>
-                </Box>
-                
-                <Box 
-                  sx={{ 
-                    mt: 2, 
-                    p: 2, 
-                    bgcolor: '#E3F2FD', 
-                    borderRadius: 1,
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: '#BBDEFB'
-                    }
-                  }}
-                >
-                  <Typography variant="body2" color="primary">
-                    View all {metrics.atRiskCount} alerts...
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Box>
+            <Grid item xs={12} md={3}>
+              <MetricCard bgcolor="#f44336" onClick={() => handleMetricClick('Non-Compliant')}>
+                <CardContent>
+                  <Typography variant="overline">Non-Compliant</Typography>
+                  <Typography variant="h3">{nonCompliantSubmissions}</Typography>
+                  <Typography variant="body2">Blocked from proceeding</Typography>
+                </CardContent>
+              </MetricCard>
+            </Grid>
+          </Grid>
+          
+          {/* Charts Row */}
+          <Grid container spacing={3} mb={4}>
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2, height: '100%' }}>
+                <Typography variant="h5" gutterBottom>
+                  Audit Control Status
+                </Typography>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={auditControlData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={true}
+                      label={renderCustomizedLabel}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {auditControlData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              {/* Replaced Submission Trends chart with Audit Alerts component */}
+              <AuditAlerts 
+                alerts={auditAlerts} 
+                totalAlerts={totalAlerts}
+                onViewAllClick={handleViewAllAlertsClick}
+              />
+            </Grid>
+          </Grid>
           
           {/* Recent Submissions Table */}
-          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-            <CardHeader 
-              title="Recent Submissions" 
-              sx={{ 
-                '& .MuiCardHeader-title': { 
-                  fontSize: '1.1rem', 
-                  fontWeight: 600,
-                  color: '#333'
-                } 
-              }}
-            />
-            <CardContent sx={{ p: 0 }}>
+          <Paper sx={{ p: 2, mb: 4 }}>
+            <Typography variant="h5" gutterBottom>
+              Recent Submissions
+            </Typography>
+            
+            {submissions.length > 0 ? (
               <TableContainer>
                 <Table>
-                  <TableHead sx={{ bgcolor: '#f9f9f9' }}>
+                  <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Submission ID</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Insured Name</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Industry</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Date Received</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                      <TableCell>Submission ID</TableCell>
+                      <TableCell>Insured Name</TableCell>
+                      <TableCell>Industry</TableCell>
+                      <TableCell>Date Received</TableCell>
+                      <TableCell>Status</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {recentSubmissions.map((submission) => (
+                    {submissions.slice(0, 5).map((submission) => (
                       <TableRow 
-                        key={submission.id}
+                        key={submission.submissionId}
                         hover
-                        sx={{ 
-                          cursor: 'pointer',
-                          '&:hover': {
-                            bgcolor: '#f5f5f5'
-                          }
-                        }}
-                        onClick={() => navigate(`/submissions/${submission.id}`)}
+                        onClick={() => navigate(`/submissions/${submission.submissionId}`)}
+                        sx={{ cursor: 'pointer' }}
                       >
-                        <TableCell><Typography variant="body2" fontWeight="medium">{submission.id}</Typography></TableCell>
-                        <TableCell>{submission.insuredName}</TableCell>
-                        <TableCell>{submission.industry}</TableCell>
-                        <TableCell>{submission.dateReceived}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={submission.status}
-                            color={getStatusColor(submission.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'}
-                            size="small"
-                            sx={{ 
-                              bgcolor: getStatusBgColor(submission.status),
-                              color: submission.status.toLowerCase() === 'at risk' ? '#ED6C02' : '#17af55',
-                              fontWeight: 'medium'
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <IconButton 
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/submissions/${submission.id}`);
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
+                        <TableCell>{submission.submissionId}</TableCell>
+                        <TableCell>{submission.insured.name}</TableCell>
+                        <TableCell>{submission.insured.industry.description}</TableCell>
+                        <TableCell>{formatDate(submission.timestamp)}</TableCell>
+                        <TableCell>{getStatusChip(submission.status)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            </CardContent>
-          </Card>
-        </Box>
+            ) : (
+              <Box p={2} textAlign="center">
+                <Typography variant="body1">No submissions available</Typography>
+              </Box>
+            )}
+            
+            {submissions.length > 5 && (
+              <Box display="flex" justifyContent="flex-end" mt={2}>
+                <Typography 
+                  color="primary" 
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => navigate('/submissions')}
+                >
+                  View all submissions
+                </Typography>
+              </Box>
+            )}
+          </Paper>
+        </>
       )}
-    </div>
+    </Box>
   );
 };
 

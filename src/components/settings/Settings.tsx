@@ -1,5 +1,6 @@
 // src/components/settings/Settings.tsx
 import React, { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   Box,
   Typography,
@@ -20,8 +21,16 @@ import {
   Snackbar
 } from '@mui/material';
 import ModeSwitcher from '../core/ModeSwitcher';
+import { RootState } from '../../store';
+import { 
+  setUseRemoteRuleEngine, 
+  setRuleEngineApiUrl 
+} from '../../store/slices/configSlice';
 
 const Settings: React.FC = () => {
+  const dispatch = useDispatch();
+  const config = useSelector((state: RootState) => state.config);
+  
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState('60');
   const [darkMode, setDarkMode] = useState(false);
@@ -108,6 +117,51 @@ const Settings: React.FC = () => {
                   fullWidth
                   sx={{ mb: 2 }}
                 />
+              </CardContent>
+            </Card>
+          </Box>
+          
+          {/* New Card for Rule Engine Settings */}
+          <Box sx={{ width: '100%', p: 1.5 }}>
+            <Card>
+              <CardHeader title="Rule Engine Settings" />
+              <CardContent>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  The rule engine is responsible for evaluating compliance checks on submissions.
+                </Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={config.useRemoteRuleEngine}
+                      onChange={(e) => dispatch(setUseRemoteRuleEngine(e.target.checked))}
+                      color="primary"
+                    />
+                  }
+                  label="Use Remote Rule Engine"
+                  sx={{ mb: 2, display: 'block' }}
+                />
+                
+                {config.useRemoteRuleEngine && (
+                  <TextField
+                    label="Rule Engine API URL"
+                    value={config.ruleEngineApiUrl}
+                    onChange={(e) => dispatch(setRuleEngineApiUrl(e.target.value))}
+                    fullWidth
+                    margin="normal"
+                    placeholder="http://localhost:3001/api"
+                    helperText="Example: http://localhost:3001/api"
+                  />
+                )}
+                
+                <Box sx={{ mt: 2 }}>
+                  <Alert severity="info">
+                    <Typography variant="body2">
+                      When enabled, compliance checks will use the remote rule engine service.
+                      When disabled, compliance checks will use the built-in rule engine.
+                    </Typography>
+                  </Alert>
+                </Box>
               </CardContent>
             </Card>
           </Box>

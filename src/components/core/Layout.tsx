@@ -23,8 +23,8 @@ import {
   Settings as SettingsIcon,
   Build as BuildIcon
 } from '@mui/icons-material';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { Link as RouterLink } from 'react-router-dom';
+// Import useNavigate instead of RouterLink
+import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { setDemoMode } from '../../store/slices/configSlice';
@@ -88,6 +88,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const dispatch = useDispatch();
   const isDemoMode = useSelector((state: RootState) => state.config.isDemoMode);
+  // Use navigate for programmatic navigation
+  const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -95,6 +97,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const handleDemoModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     dispatch(setDemoMode(event.target.checked));
+  };
+
+  // Navigation handler to replace window.location.href
+  const navigateTo = (path: string) => {
+    navigate(path);
+    if (mobileOpen) {
+      setMobileOpen(false); // Close drawer on mobile after navigation
+    }
   };
 
   const drawer = (
@@ -112,9 +122,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Divider sx={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
       
       <Box sx={{ p: 1 }}>
-        {/* Navigation Items */}
+        {/* Navigation Items - Updated to use navigate instead of window.location */}
         <SidebarItem 
-          onClick={() => window.location.href = '/'}
+          onClick={() => navigateTo('/')}
         >
           <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
             <DashboardIcon fontSize="small" />
@@ -123,7 +133,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </SidebarItem>
         
         <SidebarItem
-          onClick={() => window.location.href = '/submissions'}
+          onClick={() => navigateTo('/submissions')}
         >
           <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
             <DescriptionIcon fontSize="small" />
@@ -132,7 +142,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </SidebarItem>
         
         <SidebarItem
-          onClick={() => window.location.href = '/reports'}
+          onClick={() => navigateTo('/reports')}
         >
           <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
             <AssessmentIcon fontSize="small" />
@@ -145,7 +155,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       
       <Box sx={{ p: 1 }}>
         <SidebarItem
-          onClick={() => window.location.href = '/config'}
+          onClick={() => navigateTo('/config')}
         >
           <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
             <BuildIcon fontSize="small" />
@@ -154,7 +164,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </SidebarItem>
         
         <SidebarItem
-          onClick={() => window.location.href = '/settings'}
+          onClick={() => navigateTo('/settings')}
         >
           <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
             <SettingsIcon fontSize="small" />
@@ -195,7 +205,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography 
+            variant="h6" 
+            noWrap 
+            component="div" 
+            sx={{ flexGrow: 1, cursor: 'pointer' }}
+            onClick={() => navigateTo('/')} // Make the title clickable to go home
+          >
             Intake - Audit Compliance Monitoring
           </Typography>
           <FormControlLabel
