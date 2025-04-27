@@ -54,6 +54,7 @@ import {
   clearSelectedSubmission
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
+import ModeSwitcher from '../core/ModeSwitcher';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -79,6 +80,58 @@ function TabPanel(props: TabPanelProps) {
       )}
     </div>
   );
+}
+
+// Define interface for compliance check object
+interface ComplianceCheck {
+  checkId: string;
+  category: string;
+  status: string;
+  timestamp: string;
+  findings: string;
+  dataPoints: Record<string, any>;
+}
+
+// Define interface for document object
+interface Document {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  size: number;
+}
+
+// Define interface for submission detail object
+interface SubmissionDetail {
+  submissionId: string;
+  status: string;
+  timestamp: string;
+  broker: {
+    name: string;
+    email?: string;
+  };
+  insured: {
+    name: string;
+    industry: {
+      code: string;
+      description: string;
+    };
+    address: {
+      street: string;
+      city: string;
+      state: string;
+      zip: string;
+    };
+    yearsInBusiness?: number;
+    employeeCount?: number;
+  };
+  coverage: {
+    lines: string[];
+    effectiveDate: string;
+    expirationDate: string;
+  };
+  documents: Document[];
+  complianceChecks: ComplianceCheck[];
 }
 
 const SubmissionDetail: React.FC = () => {
@@ -128,7 +181,12 @@ const SubmissionDetail: React.FC = () => {
     setTabValue(newValue);
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string | undefined) => {
+    // Handle undefined status case
+    if (!status) {
+      return <CheckCircleIcon color="disabled" />; // Default icon for undefined status
+    }
+
     switch (status.toLowerCase()) {
       case 'compliant':
         return <CheckCircleIcon color="success" />;
@@ -138,11 +196,16 @@ const SubmissionDetail: React.FC = () => {
       case 'non-compliant':
         return <ErrorIcon color="error" />;
       default:
-        return <CheckCircleIcon color="disabled" />; // Return a default icon instead of null
+        return <CheckCircleIcon color="disabled" />; 
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined) => {
+    // Handle undefined status case
+    if (!status) {
+      return 'default';
+    }
+
     switch (status.toLowerCase()) {
       case 'compliant':
         return 'success';
@@ -157,16 +220,26 @@ const SubmissionDetail: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.error('Invalid date format:', dateString);
+      return 'Invalid date';
+    }
   };
 
   const handleDocumentSelect = (documentId: string) => {
     setSelectedDocument(documentId);
   };
+
+  // Safely access submission properties with default values
+  const getSubmissionStatus = () => selectedSubmission?.status || 'Unknown';
+  const getSubmissionBrokerName = () => selectedSubmission?.broker?.name || 'Unknown Broker';
+  const getSubmissionTimestamp = () => selectedSubmission?.timestamp || new Date().toISOString();
 
   return (
     <div>
@@ -200,9 +273,9 @@ const SubmissionDetail: React.FC = () => {
               mb: 3,
               background: 'linear-gradient(to right, #f5f7fa, #e8f0fe)',
               borderLeft: `4px solid ${
-                selectedSubmission.status.toLowerCase() === 'compliant' 
+                getSubmissionStatus().toLowerCase() === 'compliant' 
                   ? '#2E7D32' 
-                  : selectedSubmission.status.toLowerCase() === 'at risk' 
+                  : getSubmissionStatus().toLowerCase() === 'at risk' 
                     ? '#ED6C02' 
                     : '#1565C0'
               }`
@@ -211,14 +284,15 @@ const SubmissionDetail: React.FC = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap' }}>
               <Box sx={{ width: { xs: '100%', md: '70%' }, pr: 2 }}>
                 <Typography variant="h4" gutterBottom>
-                  {selectedSubmission.insured.name}
+                  {selectedSubmission.insured?.name || 'Unknown Insured'}
                 </Typography>
                 <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                  {selectedSubmission.insured.industry.description} | Submission ID: {selectedSubmission.submissionId}
+                  {selectedSubmission.insured?.industry?.description || 'Unknown Industry'} | Submission ID: {selectedSubmission.submissionId || id}
                 </Typography>
                 <Typography variant="body2">
-                  {selectedSubmission.insured.address.street}, {selectedSubmission.insured.address.city},{' '}
-                  {selectedSubmission.insured.address.state} {selectedSubmission.insured.address.zip}
+                  {selectedSubmission.insured?.address?.street || ''}, {selectedSubmission.insured?.address?.city || ''},
+                  {selectedSubmission.insured?.address?.state ? ` ${selectedSubmission.insured.address.state}` : ''} 
+                  {selectedSubmission.insured?.address?.zip ? ` ${selectedSubmission.insured.address.zip}` : ''}
                 </Typography>
               </Box>
               <Box sx={{ 
@@ -229,22 +303,22 @@ const SubmissionDetail: React.FC = () => {
                 mt: { xs: 2, md: 0 }
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  {getStatusIcon(selectedSubmission.status)}
+                  {getStatusIcon(getSubmissionStatus())}
                   <Typography variant="h6" ml={1} color={
-                    selectedSubmission.status.toLowerCase() === 'compliant' 
+                    getSubmissionStatus().toLowerCase() === 'compliant' 
                       ? 'success.main' 
-                      : selectedSubmission.status.toLowerCase() === 'at risk' 
+                      : getSubmissionStatus().toLowerCase() === 'at risk' 
                         ? 'warning.main' 
                         : 'primary.main'
                   }>
-                    {selectedSubmission.status}
+                    {getSubmissionStatus()}
                   </Typography>
                 </Box>
                 <Typography variant="body2">
-                  <strong>Broker:</strong> {selectedSubmission.broker.name}
+                  <strong>Broker:</strong> {getSubmissionBrokerName()}
                 </Typography>
                 <Typography variant="body2">
-                  <strong>Submitted:</strong> {formatDate(selectedSubmission.timestamp)}
+                  <strong>Submitted:</strong> {formatDate(getSubmissionTimestamp())}
                 </Typography>
                 <Button 
                   variant="contained" 
@@ -275,7 +349,7 @@ const SubmissionDetail: React.FC = () => {
                 icon={<AssignmentIcon />} 
                 iconPosition="start" 
                 label={
-                  <Badge badgeContent={selectedSubmission.documents.length} color="primary">
+                  <Badge badgeContent={selectedSubmission.documents?.length || 0} color="primary">
                     Documents
                   </Badge>
                 } 
@@ -284,7 +358,7 @@ const SubmissionDetail: React.FC = () => {
                 icon={<VerifiedUserIcon />} 
                 iconPosition="start" 
                 label={
-                  <Badge badgeContent={selectedSubmission.complianceChecks.length} color="warning">
+                  <Badge badgeContent={selectedSubmission.complianceChecks?.length || 0} color="warning">
                     Compliance
                   </Badge>
                 } 
@@ -316,10 +390,14 @@ const SubmissionDetail: React.FC = () => {
                         </ListItemIcon>
                         <ListItemText 
                           primary="Industry" 
-                          secondary={`${selectedSubmission.insured.industry.code} - ${selectedSubmission.insured.industry.description}`} 
+                          secondary={
+                            selectedSubmission.insured?.industry 
+                              ? `${selectedSubmission.insured.industry.code || 'N/A'} - ${selectedSubmission.insured.industry.description || 'N/A'}`
+                              : 'N/A'
+                          } 
                         />
                       </ListItem>
-                      {selectedSubmission.insured.yearsInBusiness && (
+                      {selectedSubmission.insured?.yearsInBusiness && (
                         <ListItem>
                           <ListItemIcon>
                             <TimelineIcon />
@@ -330,7 +408,7 @@ const SubmissionDetail: React.FC = () => {
                           />
                         </ListItem>
                       )}
-                      {selectedSubmission.insured.employeeCount && (
+                      {selectedSubmission.insured?.employeeCount && (
                         <ListItem>
                           <ListItemIcon>
                             <PersonIcon />
@@ -355,7 +433,7 @@ const SubmissionDetail: React.FC = () => {
                         </ListItemIcon>
                         <ListItemText 
                           primary="Lines of Business" 
-                          secondary={selectedSubmission.coverage.lines.join(', ')} 
+                          secondary={selectedSubmission.coverage?.lines?.join(', ') || 'N/A'} 
                         />
                       </ListItem>
                       <ListItem>
@@ -364,7 +442,11 @@ const SubmissionDetail: React.FC = () => {
                         </ListItemIcon>
                         <ListItemText 
                           primary="Policy Period" 
-                          secondary={`${formatDate(selectedSubmission.coverage.effectiveDate)} - ${formatDate(selectedSubmission.coverage.expirationDate)}`} 
+                          secondary={
+                            selectedSubmission.coverage 
+                              ? `${formatDate(selectedSubmission.coverage.effectiveDate || '')} - ${formatDate(selectedSubmission.coverage.expirationDate || '')}`
+                              : 'N/A'
+                          } 
                         />
                       </ListItem>
                     </List>
@@ -376,74 +458,95 @@ const SubmissionDetail: React.FC = () => {
                 <Card sx={{ mb: 2 }}>
                   <CardHeader title="Compliance Summary" />
                   <CardContent>
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Check</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell>Action</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {selectedSubmission.complianceChecks.map((check) => (
-                            <TableRow key={check.checkId}>
-                              <TableCell>{check.category}</TableCell>
-                              <TableCell>
-                                <Chip 
-                                  icon={getStatusIcon(check.status)} 
-                                  label={check.status} 
-                                  color={getStatusColor(check.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'} 
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Button 
-                                  size="small" 
-                                  onClick={() => {
-                                    setTabValue(2); // Switch to Compliance tab
-                                  }}
-                                >
-                                  View Details
-                                </Button>
-                              </TableCell>
+                    {selectedSubmission.complianceChecks && selectedSubmission.complianceChecks.length > 0 ? (
+                      <TableContainer>
+                        <Table>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Check</TableCell>
+                              <TableCell>Status</TableCell>
+                              <TableCell>Action</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                          </TableHead>
+                          <TableBody>
+                            {selectedSubmission.complianceChecks.map((check) => (
+                              <TableRow key={check.checkId || Math.random().toString()}>
+                                <TableCell>{check.category || 'Unknown'}</TableCell>
+                                <TableCell>
+                                  <Chip 
+                                    icon={getStatusIcon(check.status)} 
+                                    label={check.status || 'Unknown'} 
+                                    color={getStatusColor(check.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'} 
+                                    size="small"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Button 
+                                    size="small" 
+                                    onClick={() => {
+                                      setTabValue(2); // Switch to Compliance tab
+                                    }}
+                                  >
+                                    View Details
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No compliance checks available.
+                      </Typography>
+                    )}
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader title="Document Summary" />
                   <CardContent>
-                    <List>
-                      {selectedSubmission.documents.map((document) => (
-                        <ListItem key={document.id}>
-                          <ListItemIcon>
-                            <DescriptionIcon />
-                          </ListItemIcon>
-                          <ListItemText 
-                            primary={document.name} 
-                            secondary={document.type}
-                          />
-                          <Chip 
-                            label={document.status} 
-                            color={document.status === 'processed' ? 'success' : document.status === 'pending' ? 'warning' : 'error'} 
-                            size="small"
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                    <Button 
-                      fullWidth 
-                      variant="outlined" 
-                      sx={{ mt: 2 }}
-                      onClick={() => setTabValue(1)} // Switch to Documents tab
-                    >
-                      View All Documents
-                    </Button>
+                    {selectedSubmission.documents && selectedSubmission.documents.length > 0 ? (
+                      <List>
+                        {selectedSubmission.documents.map((document) => (
+                          <ListItem key={document.id || Math.random().toString()}>
+                            <ListItemIcon>
+                              <DescriptionIcon />
+                            </ListItemIcon>
+                            <ListItemText 
+                              primary={document.name || 'Untitled Document'} 
+                              secondary={document.type || 'Unknown Type'}
+                            />
+                            <Chip 
+                              label={document.status || 'Unknown'} 
+                              color={
+                                document.status === 'processed' 
+                                  ? 'success' 
+                                  : document.status === 'pending' 
+                                    ? 'warning' 
+                                    : 'error'
+                              } 
+                              size="small"
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No documents available.
+                      </Typography>
+                    )}
+                    
+                    {selectedSubmission.documents && selectedSubmission.documents.length > 0 && (
+                      <Button 
+                        fullWidth 
+                        variant="outlined" 
+                        sx={{ mt: 2 }}
+                        onClick={() => setTabValue(1)} // Switch to Documents tab
+                      >
+                        View All Documents
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </Box>
@@ -458,33 +561,45 @@ const SubmissionDetail: React.FC = () => {
                 <Card>
                   <CardHeader title="Submission Documents" />
                   <CardContent sx={{ p: 1 }}>
-                    <List>
-                      {selectedSubmission.documents.map((document) => (
-                        <ListItem 
-                          key={document.id}
-                          onClick={() => handleDocumentSelect(document.id)}
-                          sx={{ 
-                            cursor: 'pointer',
-                            borderRadius: 1,
-                            mb: 0.5,
-                            bgcolor: selectedDocument === document.id ? 'action.selected' : 'transparent'
-                          }}
-                        >
-                          <ListItemIcon>
-                            <DescriptionIcon />
-                          </ListItemIcon>
-                          <ListItemText 
-                            primary={document.name} 
-                            secondary={`${document.type} • ${(document.size / 1024).toFixed(0)} KB`}
-                          />
-                          <Chip 
-                            label={document.status} 
-                            color={document.status === 'processed' ? 'success' : document.status === 'pending' ? 'warning' : 'error'} 
-                            size="small"
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
+                    {selectedSubmission.documents && selectedSubmission.documents.length > 0 ? (
+                      <List>
+                        {selectedSubmission.documents.map((document) => (
+                          <ListItem 
+                            key={document.id || Math.random().toString()}
+                            onClick={() => handleDocumentSelect(document.id)}
+                            sx={{ 
+                              cursor: 'pointer',
+                              borderRadius: 1,
+                              mb: 0.5,
+                              bgcolor: selectedDocument === document.id ? 'action.selected' : 'transparent'
+                            }}
+                          >
+                            <ListItemIcon>
+                              <DescriptionIcon />
+                            </ListItemIcon>
+                            <ListItemText 
+                              primary={document.name || 'Untitled Document'} 
+                              secondary={`${document.type || 'Unknown'} • ${((document.size || 0) / 1024).toFixed(0)} KB`}
+                            />
+                            <Chip 
+                              label={document.status || 'Unknown'} 
+                              color={
+                                document.status === 'processed' 
+                                  ? 'success' 
+                                  : document.status === 'pending' 
+                                    ? 'warning' 
+                                    : 'error'
+                              } 
+                              size="small"
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                        No documents available.
+                      </Typography>
+                    )}
                   </CardContent>
                 </Card>
               </Box>
@@ -493,7 +608,9 @@ const SubmissionDetail: React.FC = () => {
               <Box sx={{ width: { xs: '100%', md: '70%' } }}>
                 <Card>
                   <CardHeader 
-                    title={selectedSubmission.documents.find(d => d.id === selectedDocument)?.name || 'Document Viewer'} 
+                    title={
+                      selectedSubmission.documents?.find(d => d.id === selectedDocument)?.name || 'Document Viewer'
+                    } 
                     action={
                       <Button variant="outlined" size="small">Download</Button>
                     }
@@ -514,8 +631,8 @@ const SubmissionDetail: React.FC = () => {
                           <DescriptionIcon sx={{ fontSize: 60, color: '#9e9e9e', mb: 2 }} />
                           <Typography variant="body1">Document Preview</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {selectedDocument 
-                              ? selectedSubmission.documents.find(d => d.id === selectedDocument)?.name 
+                            {selectedDocument && selectedSubmission.documents
+                              ? selectedSubmission.documents.find(d => d.id === selectedDocument)?.name || 'No document selected'
                               : 'No document selected'}
                           </Typography>
                         </Box>
@@ -524,18 +641,24 @@ const SubmissionDetail: React.FC = () => {
                       {/* Extracted data panel */}
                       <Box sx={{ width: '300px', ml: 2, borderLeft: '1px solid #e0e0e0', pl: 2 }}>
                         <Typography variant="h6" gutterBottom>Extracted Data</Typography>
-                        {selectedDocument && (
+                        {selectedDocument && selectedSubmission.documents ? (
                           <>
                             <Typography variant="subtitle2" gutterBottom>Metadata</Typography>
                             <Box sx={{ mb: 2 }}>
                               <Typography variant="body2">
-                                <strong>Type:</strong> {selectedSubmission.documents.find(d => d.id === selectedDocument)?.type}
+                                <strong>Type:</strong> {
+                                  selectedSubmission.documents.find(d => d.id === selectedDocument)?.type || 'Unknown'
+                                }
                               </Typography>
                               <Typography variant="body2">
-                                <strong>Status:</strong> {selectedSubmission.documents.find(d => d.id === selectedDocument)?.status}
+                                <strong>Status:</strong> {
+                                  selectedSubmission.documents.find(d => d.id === selectedDocument)?.status || 'Unknown'
+                                }
                               </Typography>
                               <Typography variant="body2">
-                                <strong>Size:</strong> {(selectedSubmission.documents.find(d => d.id === selectedDocument)?.size || 0 / 1024).toFixed(0)} KB
+                                <strong>Size:</strong> {
+                                  ((selectedSubmission.documents.find(d => d.id === selectedDocument)?.size || 0) / 1024).toFixed(0)
+                                } KB
                               </Typography>
                             </Box>
                             <Divider sx={{ my: 2 }} />
@@ -544,6 +667,10 @@ const SubmissionDetail: React.FC = () => {
                               Select items from the document to view extracted data.
                             </Typography>
                           </>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No document selected.
+                          </Typography>
                         )}
                       </Box>
                     </Box>
@@ -556,86 +683,98 @@ const SubmissionDetail: React.FC = () => {
           {/* Compliance Tab */}
           <TabPanel value={tabValue} index={2}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {selectedSubmission.complianceChecks.map((check) => (
-                <Card key={check.checkId}>
-                  <CardHeader 
-                    title={check.category}
-                    subheader={`Check ID: ${check.checkId} | ${formatDate(check.timestamp)}`}
-                    avatar={getStatusIcon(check.status)}
-                    action={
-                      <Chip 
-                        label={check.status} 
-                        color={getStatusColor(check.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'} 
-                      />
-                    }
-                  />
-                  <CardContent>
-                    <Typography variant="subtitle1" gutterBottom>Findings</Typography>
-                    <Typography variant="body1" paragraph>
-                      {check.findings}
-                    </Typography>
-                    
-                    <Divider sx={{ my: 2 }} />
-                    
-                    <Typography variant="subtitle1" gutterBottom>Data Points Used</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                      {Object.entries(check.dataPoints).map(([key, value]) => (
-                        <Box 
-                          key={key}
-                          sx={{ 
-                            width: { xs: '100%', sm: '48%', md: '23%' },
-                            p: 1, 
-                            bgcolor: '#f5f5f5', 
-                            borderRadius: 1 
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                          </Typography>
-                          <Typography variant="body2">{value?.toString() || 'N/A'}</Typography>
-                        </Box>
-                      ))}
-                    </Box>
-                    
-                    <Divider sx={{ my: 2 }} />
-                    
-                    {check.status.toLowerCase() !== 'compliant' && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle1" gutterBottom>Override</Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <Box sx={{ width: { xs: '100%', sm: '50%' } }}>
-                            <TextField
-                              select
-                              fullWidth
-                              label="Override Status"
-                              defaultValue=""
-                              size="small"
+              {selectedSubmission.complianceChecks && selectedSubmission.complianceChecks.length > 0 ? (
+                selectedSubmission.complianceChecks.map((check) => (
+                  <Card key={check.checkId || Math.random().toString()}>
+                    <CardHeader 
+                      title={check.category || 'Unknown Check'}
+                      subheader={`Check ID: ${check.checkId || 'Unknown'} | ${formatDate(check.timestamp || '')}`}
+                      avatar={getStatusIcon(check.status)}
+                      action={
+                        <Chip 
+                          label={check.status || 'Unknown'} 
+                          color={getStatusColor(check.status) as 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'} 
+                        />
+                      }
+                    />
+                    <CardContent>
+                      <Typography variant="subtitle1" gutterBottom>Findings</Typography>
+                      <Typography variant="body1" paragraph>
+                        {check.findings || 'No findings available.'}
+                      </Typography>
+                      
+                      <Divider sx={{ my: 2 }} />
+                      
+                      <Typography variant="subtitle1" gutterBottom>Data Points Used</Typography>
+                      {check.dataPoints && Object.keys(check.dataPoints).length > 0 ? (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                          {Object.entries(check.dataPoints).map(([key, value]) => (
+                            <Box 
+                              key={key}
+                              sx={{ 
+                                width: { xs: '100%', sm: '48%', md: '23%' },
+                                p: 1, 
+                                bgcolor: '#f5f5f5', 
+                                borderRadius: 1 
+                              }}
                             >
-                              <MenuItem value="approved">Approve Exception</MenuItem>
-                              <MenuItem value="declined">Decline Exception</MenuItem>
-                              <MenuItem value="needsInfo">Need More Information</MenuItem>
-                            </TextField>
-                          </Box>
-                          <Box sx={{ width: '100%' }}>
-                            <TextField
-                              fullWidth
-                              label="Justification"
-                              multiline
-                              rows={3}
-                              placeholder="Enter reason for override..."
-                            />
-                          </Box>
-                          <Box>
-                            <Button variant="contained" color="primary">
-                              Submit Override
-                            </Button>
+                              <Typography variant="caption" color="text.secondary">
+                                {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                              </Typography>
+                              <Typography variant="body2">{value?.toString() || 'N/A'}</Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No data points available.
+                        </Typography>
+                      )}
+                      
+                      <Divider sx={{ my: 2 }} />
+                      
+                      {check.status && check.status.toLowerCase() !== 'compliant' && (
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="subtitle1" gutterBottom>Override</Typography>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box sx={{ width: { xs: '100%', sm: '50%' } }}>
+                              <TextField
+                                select
+                                fullWidth
+                                label="Override Status"
+                                defaultValue=""
+                                size="small"
+                              >
+                                <MenuItem value="approved">Approve Exception</MenuItem>
+                                <MenuItem value="declined">Decline Exception</MenuItem>
+                                <MenuItem value="needsInfo">Need More Information</MenuItem>
+                              </TextField>
+                            </Box>
+                            <Box sx={{ width: '100%' }}>
+                              <TextField
+                                fullWidth
+                                label="Justification"
+                                multiline
+                                rows={3}
+                                placeholder="Enter reason for override..."
+                              />
+                            </Box>
+                            <Box>
+                              <Button variant="contained" color="primary">
+                                Submit Override
+                              </Button>
+                            </Box>
                           </Box>
                         </Box>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      )}
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography variant="body1">No compliance checks available.</Typography>
+                </Box>
+              )}
             </Box>
           </TabPanel>
 
@@ -651,7 +790,7 @@ const SubmissionDetail: React.FC = () => {
                     </ListItemIcon>
                     <ListItemText 
                       primary="Submission Created" 
-                      secondary={`${formatDate(selectedSubmission.timestamp)} by ${selectedSubmission.broker.name}`}
+                      secondary={`${formatDate(selectedSubmission.timestamp || '')} by ${selectedSubmission.broker?.name || 'Unknown'}`}
                     />
                   </ListItem>
                   <Divider component="li" />
@@ -662,7 +801,7 @@ const SubmissionDetail: React.FC = () => {
                     </ListItemIcon>
                     <ListItemText 
                       primary="Documents Processed" 
-                      secondary={`${formatDate(selectedSubmission.timestamp)} - ${selectedSubmission.documents.length} documents received`}
+                      secondary={`${formatDate(selectedSubmission.timestamp || '')} - ${selectedSubmission.documents?.length || 0} documents received`}
                     />
                   </ListItem>
                   <Divider component="li" />
@@ -673,7 +812,7 @@ const SubmissionDetail: React.FC = () => {
                     </ListItemIcon>
                     <ListItemText 
                       primary="Compliance Checks Completed" 
-                      secondary={`${formatDate(selectedSubmission.timestamp)} - ${selectedSubmission.complianceChecks.length} checks performed`}
+                      secondary={`${formatDate(selectedSubmission.timestamp || '')} - ${selectedSubmission.complianceChecks?.length || 0} checks performed`}
                     />
                   </ListItem>
                   <Divider component="li" />
@@ -683,8 +822,8 @@ const SubmissionDetail: React.FC = () => {
                       <CheckCircleIcon color={getStatusColor(selectedSubmission.status) as 'success' | 'warning' | 'error'} />
                     </ListItemIcon>
                     <ListItemText 
-                      primary={`Submission Marked as ${selectedSubmission.status}`} 
-                      secondary={formatDate(selectedSubmission.timestamp)}
+                      primary={`Submission Marked as ${selectedSubmission.status || 'Unknown'}`} 
+                      secondary={formatDate(selectedSubmission.timestamp || '')}
                     />
                   </ListItem>
                 </List>

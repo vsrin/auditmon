@@ -1,5 +1,5 @@
 // src/components/dashboard/Dashboard.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -22,7 +22,8 @@ import {
 } from '@mui/material';
 import { 
   Visibility as VisibilityIcon,
-  ArrowUpward as ArrowUpwardIcon
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { RootState } from '../../store';
@@ -45,11 +46,51 @@ const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: str
   }
 }));
 
+// Define types for our submission data
+interface SubmissionData {
+  submissionId: string;
+  status: string;
+  documents?: Array<{
+    id: string;
+    status: string;
+  }>;
+  complianceChecks?: Array<{
+    category: string;
+    status: string;
+  }>;
+  insured?: {
+    name: string;
+    industry?: {
+      description: string;
+    }
+  };
+  [key: string]: any;
+}
+
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { submissions, loading, error } = useSelector((state: RootState) => state.submissions);
   const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
+  
+  // State for metrics
+  const [metrics, setMetrics] = useState({
+    todayCount: 0,
+    todayChange: 0,
+    isIncrease: true,
+    compliantCount: 0,
+    compliantPercentage: 0,
+    atRiskCount: 0,
+    atRiskPercentage: 0
+  });
+
+  // State for audit control data
+  const [auditControlData, setAuditControlData] = useState([
+    { name: 'Documents Complete', value: 30, color: '#4285F4' },
+    { name: 'In Risk Appetite', value: 40, color: '#17af55' },
+    { name: 'Needs Financial Review', value: 20, color: '#FBBC05' },
+    { name: 'Loss History Issues', value: 10, color: '#EA4335' },
+  ]);
 
   // Configure API service based on current settings
   useEffect(() => {
@@ -73,32 +114,64 @@ const Dashboard: React.FC = () => {
     loadSubmissions();
   }, [dispatch, isDemoMode]);
 
-  // Count submissions by status
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const submissionCounts = submissions.reduce(
-    (acc, submission) => {
-      const status = submission.status.toLowerCase();
-      if (status === 'compliant') {
-        acc.compliant += 1;
-      } else if (status === 'requires attention' || status === 'at risk') {
-        acc.atRisk += 1;
-      } else if (status === 'non-compliant') {
-        acc.nonCompliant += 1;
-      } else {
-        acc.total += 1;
-      }
-      return acc;
-    },
-    { compliant: 0, atRisk: 0, nonCompliant: 0, total: submissions.length }
-  );
+  // Calculate and update metrics when submissions change
+  useEffect(() => {
+    if (!submissions || submissions.length === 0) return;
 
-  // Pie chart data for audit control status
-  const auditControlData = [
-    { name: 'Documents Complete', value: 30, color: '#4285F4' },
-    { name: 'In Risk Appetite', value: 40, color: '#17af55' },
-    { name: 'Needs Financial Review', value: 20, color: '#FBBC05' },
-    { name: 'Loss History Issues', value: 10, color: '#EA4335' },
-  ];
+    // Type safety - cast submissions to our SubmissionData type
+    const typedSubmissions = submissions as SubmissionData[];
+    
+    // Count submissions by status
+    const compliantCount = typedSubmissions.filter(sub => 
+      sub.status.toLowerCase() === 'compliant').length;
+    
+    const atRiskCount = typedSubmissions.filter(sub => 
+      sub.status.toLowerCase() === 'at risk').length;
+    
+    // Calculate today's submissions (for demo, we'll just use all submissions)
+    const todayCount = typedSubmissions.length;
+    
+    // Calculate compliance percentages
+    const compliantPercentage = Math.round((compliantCount / todayCount) * 100);
+    const atRiskPercentage = Math.round((atRiskCount / todayCount) * 100);
+    
+    // Set fake change percentage (would come from API in real app)
+    const isIncrease = Math.random() > 0.5;
+    const todayChange = Math.round(Math.random() * 20);
+    
+    setMetrics({
+      todayCount,
+      todayChange,
+      isIncrease,
+      compliantCount,
+      compliantPercentage,
+      atRiskCount,
+      atRiskPercentage
+    });
+
+    // Update audit control data based on submissions
+    const docComplete = Math.round(typedSubmissions.filter(s => 
+      s.documents && s.documents.every(d => d.status === 'processed')).length / typedSubmissions.length * 100);
+    
+    const inRiskAppetite = Math.round(typedSubmissions.filter(s => 
+      s.status.toLowerCase() === 'compliant').length / typedSubmissions.length * 100);
+    
+    // Check for financial reviews with proper type safety
+    const needsFinancialReview = Math.round(typedSubmissions.filter(s => 
+      s.complianceChecks && s.complianceChecks.some((c: {category: string; status: string;}) => 
+        c.category.toLowerCase().includes('financial') && c.status.toLowerCase() !== 'compliant'
+      )).length / typedSubmissions.length * 100);
+    
+    const lossHistoryIssues = 100 - docComplete - inRiskAppetite - needsFinancialReview;
+    
+    setAuditControlData([
+      { name: 'Documents Complete', value: docComplete, color: '#4285F4' },
+      { name: 'In Risk Appetite', value: inRiskAppetite, color: '#17af55' },
+      { name: 'Needs Financial Review', value: needsFinancialReview, color: '#FBBC05' },
+      { name: 'Loss History Issues', value: Math.max(0, lossHistoryIssues), color: '#EA4335' },
+    ]);
+
+  }, [submissions]);
 
   // Recent submissions with today's date
   const todayDate = new Date().toLocaleDateString('en-US', {
@@ -107,36 +180,14 @@ const Dashboard: React.FC = () => {
     year: 'numeric'
   });
 
-  const recentSubmissions = [
-    { 
-      id: 'SUB-28954', 
-      insuredName: 'Acme Industries LLC', 
-      industry: 'Manufacturing', 
-      dateReceived: todayDate,
-      status: 'At Risk' 
-    },
-    { 
-      id: 'SUB-28953', 
-      insuredName: 'Omega Retail Group', 
-      industry: 'Retail', 
-      dateReceived: todayDate,
-      status: 'Compliant' 
-    },
-    { 
-      id: 'SUB-28952', 
-      insuredName: 'TechSoft Solutions', 
-      industry: 'Technology', 
-      dateReceived: todayDate,
-      status: 'Compliant' 
-    },
-    { 
-      id: 'SUB-28951', 
-      insuredName: 'GreenLeaf Properties', 
-      industry: 'Real Estate', 
-      dateReceived: todayDate,
-      status: 'At Risk' 
-    },
-  ];
+  // Get recent submissions from the full submissions list
+  const recentSubmissions = (submissions as SubmissionData[]).slice(0, 4).map(sub => ({
+    id: sub.submissionId,
+    insuredName: sub.insured?.name || 'Unknown',
+    industry: sub.insured?.industry?.description || 'Unknown',
+    dateReceived: todayDate,
+    status: sub.status
+  }));
 
   // Status to color mapping
   const getStatusColor = (status: string) => {
@@ -188,11 +239,21 @@ const Dashboard: React.FC = () => {
                 </Typography>
                 <Box display="flex" alignItems="baseline" mt={1}>
                   <Typography variant="h3" component="div" fontWeight="bold" color="#1565C0">
-                    27
+                    {metrics.todayCount}
                   </Typography>
-                  <Typography variant="body2" color="success.main" ml={1} display="flex" alignItems="center">
-                    <ArrowUpwardIcon fontSize="small" />
-                    12% vs yesterday
+                  <Typography 
+                    variant="body2" 
+                    color={metrics.isIncrease ? "success.main" : "error.main"} 
+                    ml={1} 
+                    display="flex" 
+                    alignItems="center"
+                  >
+                    {metrics.isIncrease ? (
+                      <ArrowUpwardIcon fontSize="small" />
+                    ) : (
+                      <ArrowDownwardIcon fontSize="small" />
+                    )}
+                    {metrics.todayChange}% vs yesterday
                   </Typography>
                 </Box>
               </CardContent>
@@ -205,10 +266,10 @@ const Dashboard: React.FC = () => {
                 </Typography>
                 <Box display="flex" alignItems="baseline" mt={1}>
                   <Typography variant="h3" component="div" fontWeight="bold" color="#17af55">
-                    19
+                    {metrics.compliantCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" ml={1}>
-                    70% of total
+                    {metrics.compliantPercentage}% of total
                   </Typography>
                 </Box>
               </CardContent>
@@ -221,10 +282,10 @@ const Dashboard: React.FC = () => {
                 </Typography>
                 <Box display="flex" alignItems="baseline" mt={1}>
                   <Typography variant="h3" component="div" fontWeight="bold" color="#ED6C02">
-                    8
+                    {metrics.atRiskCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" ml={1}>
-                    30% of total
+                    {metrics.atRiskPercentage}% of total
                   </Typography>
                 </Box>
               </CardContent>
@@ -271,7 +332,7 @@ const Dashboard: React.FC = () => {
                     Missing Financial Documents
                   </Typography>
                   <Typography variant="body2">
-                    5 submissions need financial statements
+                    {metrics.atRiskCount} submissions need financial statements
                   </Typography>
                 </Box>
                 
@@ -280,7 +341,7 @@ const Dashboard: React.FC = () => {
                     Outside Risk Appetite
                   </Typography>
                   <Typography variant="body2">
-                    3 submissions in prohibited classes
+                    {Math.max(1, Math.floor(metrics.atRiskCount / 3))} submissions in prohibited classes
                   </Typography>
                 </Box>
                 
@@ -298,7 +359,7 @@ const Dashboard: React.FC = () => {
                   }}
                 >
                   <Typography variant="body2" color="primary">
-                    View all 8 alerts...
+                    View all {metrics.atRiskCount} alerts...
                   </Typography>
                 </Box>
               </CardContent>
@@ -354,7 +415,7 @@ const Dashboard: React.FC = () => {
                             size="small"
                             sx={{ 
                               bgcolor: getStatusBgColor(submission.status),
-                              color: submission.status === 'At Risk' ? '#ED6C02' : '#17af55',
+                              color: submission.status.toLowerCase() === 'at risk' ? '#ED6C02' : '#17af55',
                               fontWeight: 'medium'
                             }}
                           />
