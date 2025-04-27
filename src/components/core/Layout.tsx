@@ -131,14 +131,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography>Submissions</Typography>
         </SidebarItem>
         
-        <SidebarItem
-          onClick={() => window.location.href = '/reports'}
-        >
-          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
-            <AssessmentIcon fontSize="small" />
-          </Box>
-          <Typography>Reports</Typography>
-        </SidebarItem>
+        /*    /index.html   200
       </Box>
       
       <Divider sx={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
