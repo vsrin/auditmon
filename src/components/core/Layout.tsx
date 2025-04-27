@@ -112,7 +112,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Divider sx={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
       
       <Box sx={{ p: 1 }}>
-        {/* Fix: Use SidebarItem instead of StyledListItem */}
+        {/* Navigation Items */}
         <SidebarItem 
           onClick={() => window.location.href = '/'}
         >
@@ -131,7 +131,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography>Submissions</Typography>
         </SidebarItem>
         
-        /*    /index.html   200
+        <SidebarItem
+          onClick={() => window.location.href = '/reports'}
+        >
+          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
+            <AssessmentIcon fontSize="small" />
+          </Box>
+          <Typography>Reports</Typography>
+        </SidebarItem>
       </Box>
       
       <Divider sx={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
