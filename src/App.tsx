@@ -11,6 +11,7 @@ import SubmissionList from './components/submissions/SubmissionList';
 import SubmissionDetail from './components/submissions/SubmissionDetail';
 import ConfigurationUtility from './components/config/ConfigurationUtility';
 import Settings from './components/settings/Settings';
+import Reports from './components/reports/Reports';
 
 const App: React.FC = () => {
   return (
@@ -25,6 +26,7 @@ const App: React.FC = () => {
               <Route path="/submissions/:id" element={<SubmissionDetail />} />
               <Route path="/config" element={<ConfigurationUtility />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/reports" element={<Reports />} />
             </Routes>
           </Layout>
         </Router>
