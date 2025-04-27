@@ -3,33 +3,47 @@ import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Box,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  Paper,
   Typography,
   TextField,
   Button,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  Divider,
   Alert,
   Snackbar,
   Card,
   CardContent,
   CardHeader,
-  Grid,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  Switch,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  FormControlLabel,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  Tabs,
+  Tab
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { setApiEndpoint, setApiMapping } from '../../store/slices/configSlice';
 import { RootState } from '../../store';
 import ModeSwitcher from '../core/ModeSwitcher';
+import ApiMappingBuilder from './ApiMappingBuilder';
 
-// Rest of the component remains the same...
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`mapping-tabpanel-${index}`}
+      aria-labelledby={`mapping-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 const ConfigurationUtility: React.FC = () => {
   const dispatch = useDispatch();
@@ -42,6 +56,7 @@ const ConfigurationUtility: React.FC = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
   const [endpointError, setEndpointError] = useState('');
   const [mappingError, setMappingError] = useState('');
+  const [tabValue, setTabValue] = useState(0);
   
   const handleEndpointChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEndpoint(e.target.value);
@@ -85,6 +100,12 @@ const ConfigurationUtility: React.FC = () => {
     }
   };
   
+  const handleSaveVisualMapping = (mapping: any) => {
+    dispatch(setApiMapping(mapping));
+    setMappingJson(JSON.stringify(mapping, null, 2));
+    showSnackbar('API mapping saved successfully', 'success');
+  };
+  
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
@@ -97,9 +118,12 @@ const ConfigurationUtility: React.FC = () => {
   
   const handleResetMapping = () => {
     setMappingJson('');
-    // Fix: Use empty object instead of null
     dispatch(setApiMapping({}));
     showSnackbar('API mapping reset', 'success');
+  };
+  
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
   };
   
   return (
@@ -116,115 +140,86 @@ const ConfigurationUtility: React.FC = () => {
         Use this utility to configure the connection between your API and the monitoring dashboard.
       </Typography>
       
-      <Grid container spacing={3}>
-        {/* Fix Grid item issue - use Box components instead */}
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <Card>
-            <CardHeader title="API Connection Settings" />
-            <CardContent>
-              <TextField
-                fullWidth
-                label="API Endpoint URL"
-                variant="outlined"
-                value={endpoint}
-                onChange={handleEndpointChange}
-                error={!!endpointError}
-                helperText={endpointError}
-                sx={{ mb: 2 }}
-              />
-              <Button 
-                variant="contained" 
-                color="primary" 
-                onClick={handleSaveEndpoint}
-              >
-                Save Endpoint
-              </Button>
-            </CardContent>
-          </Card>
-        </Box>
-        
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <Card>
-            <CardHeader 
-              title="API Mapping Configuration" 
-              action={
-                <Button 
-                  variant="outlined" 
-                  color="secondary" 
-                  onClick={handleResetMapping}
-                  size="small"
-                >
-                  Reset
-                </Button>
-              }
+      <Card sx={{ mb: 3 }}>
+        <CardHeader title="API Connection Settings" />
+        <CardContent>
+          <TextField
+            fullWidth
+            label="API Endpoint URL"
+            variant="outlined"
+            value={endpoint}
+            onChange={handleEndpointChange}
+            error={!!endpointError}
+            helperText={endpointError}
+            sx={{ mb: 2 }}
+          />
+          <Button 
+            variant="contained" 
+            color="primary" 
+            onClick={handleSaveEndpoint}
+          >
+            Save Endpoint
+          </Button>
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader 
+          title="API Mapping Configuration" 
+          action={
+            <Button 
+              variant="outlined" 
+              color="secondary" 
+              onClick={handleResetMapping}
+              size="small"
+            >
+              Reset
+            </Button>
+          }
+        />
+        <CardContent>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tabValue} onChange={handleTabChange} aria-label="mapping configuration tabs">
+              <Tab label="Visual Mapper" />
+              <Tab label="JSON Editor" />
+            </Tabs>
+          </Box>
+          
+          <TabPanel value={tabValue} index={0}>
+            <ApiMappingBuilder 
+              initialMapping={apiMapping || {}}
+              onSave={handleSaveVisualMapping}
             />
-            <CardContent>
-              <Typography variant="body2" paragraph>
-                Define how your API response fields map to the dashboard's data model. Use JSON format.
-              </Typography>
-              
-              <TextField
-                fullWidth
-                label="API Mapping JSON"
-                variant="outlined"
-                multiline
-                rows={10}
-                value={mappingJson}
-                onChange={handleMappingChange}
-                error={!!mappingError}
-                helperText={mappingError}
-                sx={{ mb: 2, fontFamily: '"Roboto Mono", monospace' }}
-              />
-              
-              <Button 
-                variant="contained" 
-                color="primary" 
-                onClick={handleSaveMapping}
-              >
-                Save Mapping
-              </Button>
-            </CardContent>
-          </Card>
-        </Box>
-        
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">Sample Mapping Configuration</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Typography variant="body2" sx={{ fontFamily: '"Roboto Mono", monospace', whiteSpace: 'pre-wrap' }}>
-{`{
-  "submissionId": "submission.id",
-  "timestamp": "submission.created_at",
-  "broker": {
-    "name": "broker.company_name",
-    "email": "broker.email_address"
-  },
-  "insured": {
-    "name": "insured.legal_name",
-    "industry": {
-      "code": "insured.sic_code",
-      "description": "insured.industry_description"
-    },
-    "address": {
-      "street": "insured.address.line1",
-      "city": "insured.address.city",
-      "state": "insured.address.state",
-      "zip": "insured.address.postal_code"
-    }
-  },
-  "coverage": {
-    "lines": "submission.coverage_lines",
-    "effectiveDate": "submission.effective_date",
-    "expirationDate": "submission.expiration_date"
-  }
-}`}
-              </Typography>
-            </AccordionDetails>
-          </Accordion>
-        </Box>
-      </Grid>
+          </TabPanel>
+          
+          <TabPanel value={tabValue} index={1}>
+            <Typography variant="body2" paragraph>
+              Define how your API response fields map to the dashboard's data model using JSON format.
+            </Typography>
+            
+            <TextField
+              fullWidth
+              label="API Mapping JSON"
+              variant="outlined"
+              multiline
+              rows={10}
+              value={mappingJson}
+              onChange={handleMappingChange}
+              error={!!mappingError}
+              helperText={mappingError}
+              sx={{ mb: 2, fontFamily: '"Roboto Mono", monospace' }}
+            />
+            
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleSaveMapping}
+            >
+              Save Mapping
+            </Button>
+          </TabPanel>
+        </CardContent>
+      </Card>
       
       <Snackbar 
         open={openSnackbar} 
