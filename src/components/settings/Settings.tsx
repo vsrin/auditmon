@@ -54,10 +54,32 @@ const Settings: React.FC = () => {
         </Typography>
       </Box>
       
-      <ModeSwitcher />
-      
       <Box sx={{ flexGrow: 1 }}>
         <Grid container spacing={3}>
+          {/* Application Mode Card - Added here */}
+          <Box sx={{ width: '100%', p: 1.5 }}>
+            <Card>
+              <CardHeader title="Application Mode" />
+              <CardContent>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Toggle between Demo mode (using synthetic data) and Live mode (connecting to the API).
+                </Typography>
+                
+                {/* Using the full ModeSwitcher component */}
+                <ModeSwitcher />
+                
+                <Box sx={{ mt: 2 }}>
+                  <Alert severity="info">
+                    <Typography variant="body2">
+                      When in Demo mode, the application uses synthetic data for demonstration purposes.
+                      When in Live mode, the application connects to the configured API endpoint.
+                    </Typography>
+                  </Alert>
+                </Box>
+              </CardContent>
+            </Card>
+          </Box>
+          
           <Box sx={{ width: '50%', p: 1.5 }}>
             <Card>
               <CardHeader title="Display Settings" />
@@ -121,7 +143,7 @@ const Settings: React.FC = () => {
             </Card>
           </Box>
           
-          {/* New Card for Rule Engine Settings */}
+          {/* Rule Engine Settings Card */}
           <Box sx={{ width: '100%', p: 1.5 }}>
             <Card>
               <CardHeader title="Rule Engine Settings" />

@@ -10,6 +10,10 @@ import RuleService from './ruleService';
 class RuleEngineProvider {
   private useRemoteEngine: boolean = false;
   private ruleEngineApiUrl: string = '';
+  
+  // Cache for NAICS code restriction rule
+  private restrictedNaicsCodes: string[] = ['6531', '7371', '3579']; // Default restricted codes
+  private naicsRuleEnabled: boolean = true;
 
   constructor() {
     this.useRemoteEngine = false;
@@ -28,6 +32,40 @@ class RuleEngineProvider {
   }
 
   /**
+   * Update the list of restricted NAICS codes
+   * @param codes The new list of restricted NAICS codes
+   */
+  updateRestrictedNaicsCodes(codes: string[]): void {
+    this.restrictedNaicsCodes = codes;
+    console.log('Updated restricted NAICS codes:', codes);
+  }
+
+  /**
+   * Enable or disable the NAICS restriction rule
+   * @param enabled Whether the rule should be enabled
+   */
+  setNaicsRuleEnabled(enabled: boolean): void {
+    this.naicsRuleEnabled = enabled;
+    console.log('NAICS rule enabled:', enabled);
+  }
+
+  /**
+   * Get the current list of restricted NAICS codes
+   * @returns The list of restricted NAICS codes
+   */
+  getRestrictedNaicsCodes(): string[] {
+    return this.restrictedNaicsCodes;
+  }
+
+  /**
+   * Check if the NAICS restriction rule is enabled
+   * @returns Whether the rule is enabled
+   */
+  isNaicsRuleEnabled(): boolean {
+    return this.naicsRuleEnabled;
+  }
+
+  /**
    * Evaluates a submission against defined rules
    * @param submission The submission to evaluate
    * @returns Promise with evaluation results
@@ -41,8 +79,55 @@ class RuleEngineProvider {
       return this.callRemoteRuleEngine(submission);
     } else {
       console.log('Using local rule engine for evaluation');
-      return RuleService.evaluateSubmissionLocal(submission);
+      // First, get the standard evaluation
+      const standardEvaluation = await RuleService.evaluateSubmissionLocal(submission);
+      
+      // Then, apply the NAICS rule if it's enabled
+      if (this.naicsRuleEnabled) {
+        return this.applyNaicsRule(submission, standardEvaluation);
+      }
+      
+      return standardEvaluation;
     }
+  }
+
+  /**
+   * Apply the NAICS restriction rule to the evaluation result
+   * @param submission The submission to evaluate
+   * @param evaluation The initial evaluation result
+   * @returns The updated evaluation result
+   */
+  private applyNaicsRule(submission: SubmissionDetail, evaluation: { checks: any[], overallStatus: string }): { checks: any[], overallStatus: string } {
+    // Check if the submission's industry code is in the restricted list
+    const industryCode = submission.insured?.industry?.code;
+    
+    if (industryCode && this.restrictedNaicsCodes.includes(industryCode)) {
+      // Industry is restricted, mark as non-compliant
+      const naicsCheck = {
+        checkId: 'NAICS-RESTRICT-001',
+        category: 'Risk Appetite',
+        status: 'non-compliant',
+        findings: `Industry code ${industryCode} is in the restricted list`,
+        timestamp: new Date().toISOString(),
+        dataPoints: {
+          industryCode: industryCode,
+          industryDescription: submission.insured?.industry?.description || '',
+          restrictedCodes: this.restrictedNaicsCodes.join(', ')
+        }
+      };
+      
+      // Add the check to the list
+      const updatedChecks = [...evaluation.checks, naicsCheck];
+      
+      // Update the overall status to non-compliant
+      return {
+        checks: updatedChecks,
+        overallStatus: 'Non-Compliant'
+      };
+    }
+    
+    // Industry is not restricted, no change to evaluation
+    return evaluation;
   }
 
   /**
@@ -61,6 +146,15 @@ class RuleEngineProvider {
       });
 
       console.log('Remote rule engine response:', response.data);
+      
+      // Apply NAICS rule to remote evaluation if enabled
+      if (this.naicsRuleEnabled) {
+        return this.applyNaicsRule(submission, {
+          checks: response.data.checks || [],
+          overallStatus: response.data.overallStatus || 'Unknown'
+        });
+      }
+      
       return {
         checks: response.data.checks || [],
         overallStatus: response.data.overallStatus || 'Unknown'
@@ -69,7 +163,14 @@ class RuleEngineProvider {
       console.error('Error calling remote rule engine:', error);
       // Fallback to local rule engine if remote fails
       console.log('Falling back to local rule engine');
-      return RuleService.evaluateSubmissionLocal(submission);
+      const localEvaluation = RuleService.evaluateSubmissionLocal(submission);
+      
+      // Apply NAICS rule to local evaluation if enabled
+      if (this.naicsRuleEnabled) {
+        return this.applyNaicsRule(submission, localEvaluation);
+      }
+      
+      return localEvaluation;
     }
   }
 }

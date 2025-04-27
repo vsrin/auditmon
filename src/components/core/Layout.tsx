@@ -9,8 +9,7 @@ import {
   Drawer, 
   Divider, 
   IconButton,
-  Switch,
-  FormControlLabel,
+  Chip,
   useTheme,
   useMediaQuery,
   styled
@@ -27,7 +26,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { setDemoMode } from '../../store/slices/configSlice';
 import { Code as CodeIcon } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -87,16 +85,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const dispatch = useDispatch();
-  const isDemoMode = useSelector((state: RootState) => state.config.isDemoMode);
+  const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
   // Use navigate for programmatic navigation
   const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
-  };
-
-  const handleDemoModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setDemoMode(event.target.checked));
   };
 
   // Navigation handler to replace window.location.href
@@ -214,18 +208,19 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             Intake - Audit Compliance Monitoring
           </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={isDemoMode}
-                onChange={handleDemoModeChange}
-                color="primary"
-                size="small"
-              />
-            }
-            label="Demo Mode"
-            sx={{ mr: 1, '& .MuiTypography-root': { fontSize: '0.75rem' } }}
+          
+          {/* Mode indicator chip instead of toggle */}
+          <Chip
+            label={isDemoMode ? 'Demo Mode' : 'Live Mode'}
+            color={isDemoMode ? 'default' : 'primary'}
+            size="small"
+            sx={{ mr: 1 }}
           />
+          {!isDemoMode && (
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 2 }}>
+              Connected to {apiEndpoint}
+            </Typography>
+          )}
         </Toolbar>
       </AppBar>
       <Box

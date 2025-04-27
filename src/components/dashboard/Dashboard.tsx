@@ -1,5 +1,5 @@
 // src/components/dashboard/Dashboard.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -31,7 +31,6 @@ import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
 import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
 import { SubmissionData } from '../../types';
-import AuditAlerts from './AuditAlerts'; // Import the new AuditAlerts component
 
 // Styled components for metrics cards
 const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
@@ -83,76 +82,56 @@ const renderCustomizedLabel = ({
   );
 };
 
+// Define this outside the component to prevent recreation on each render
+const defaultDashboardData = {
+  submissionTrends: {
+    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+    data: [12, 19, 13, 25, 22, 42]
+  }
+};
+
+// Audit alerts data
+const auditAlerts = [
+  {
+    title: "Missing Financial Documents",
+    description: "5 submissions need financial statements",
+    color: "#fff3e0" // Light orange background
+  },
+  {
+    title: "Outside Risk Appetite",
+    description: "3 submissions in prohibited classes",
+    color: "#ffebee" // Light red background
+  }
+];
+
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isDemoMode } = useSelector((state: RootState) => state.config);
-  const { submissions } = useSelector((state: RootState) => state.submissions);
+  const { submissions, loading: submissionsLoading } = useSelector((state: RootState) => state.submissions);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<any>(defaultDashboardData);
+  const [initialized, setInitialized] = useState(false);
 
   // Demo mode metrics - these should match exactly with what's displayed on the cards
   const totalSubmissions = 42;
   const compliantSubmissions = 28;
   const atRiskSubmissions = 10;
   const nonCompliantSubmissions = 4;
-  
-  // Audit alerts data
-  const auditAlerts = [
-    {
-      title: "Missing Financial Documents",
-      description: "5 submissions need financial statements",
-      color: "#fff3e0" // Light orange background
-    },
-    {
-      title: "Outside Risk Appetite",
-      description: "3 submissions in prohibited classes",
-      color: "#ffebee" // Light red background
-    }
+
+  // Sample audit control data - matches your screenshot
+  const auditControlData = [
+    { name: 'Documents Complete', value: 75 },
+    { name: 'In Risk Appetite', value: 25 },
+    { name: 'Loss History Issues', value: 0 },
+    { name: 'Needs Financial Review', value: 0 }
   ];
-  
-  const totalAlerts = 8; // Total number of alerts for "View all X alerts" text
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Load reports data
-        const reports = await apiService.getReports();
-        setDashboardData(reports);
-        
-        // Load submissions data for the table
-        dispatch(fetchSubmissionsStart());
-        let submissionsData;
-        
-        if (isDemoMode) {
-          // In demo mode, generate synthetic data to match the metrics
-          submissionsData = generateSyntheticSubmissions();
-        } else {
-          // In live mode, fetch from API
-          submissionsData = await apiService.getSubmissions();
-        }
-        
-        dispatch(fetchSubmissionsSuccess(submissionsData));
-      } catch (err) {
-        console.error('Error loading dashboard data:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
-        setError(errorMessage);
-        dispatch(fetchSubmissionsFailure(errorMessage));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDashboardData();
-  }, [dispatch, isDemoMode]);
-
-  // Generate synthetic submissions that match our metrics
-  const generateSyntheticSubmissions = (): SubmissionData[] => {
+  // Generate synthetic submissions - defined as memoized function to prevent recreation
+  const generateSyntheticSubmissions = useCallback((): SubmissionData[] => {
+    console.log("Generating synthetic submissions");
     // Create company names for our synthetic data
     const companies = [
       { name: 'Acme Manufacturing Inc.', industry: 'Manufacturing' },
@@ -247,15 +226,93 @@ const Dashboard: React.FC = () => {
     }
     
     return syntheticSubmissions;
-  };
+  }, [compliantSubmissions, atRiskSubmissions, nonCompliantSubmissions]);
 
-  // Sample audit control data - matches your screenshot
-  const auditControlData = [
-    { name: 'Documents Complete', value: 75 },
-    { name: 'In Risk Appetite', value: 25 },
-    { name: 'Loss History Issues', value: 0 },
-    { name: 'Needs Financial Review', value: 0 }
-  ];
+  // Load dashboard data only once on mount or when mode changes
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (initialized && !isDemoMode) {
+        return; // Skip if already initialized in live mode
+      }
+
+      if (loading || submissionsLoading) {
+        return; // Skip if already loading
+      }
+
+      console.log("Loading dashboard data, isDemoMode:", isDemoMode);
+      setLoading(true);
+      setError(null);
+      
+      try {
+        if (isDemoMode) {
+          // For demo mode, use our default dashboard data
+          setDashboardData(defaultDashboardData);
+          
+          // Generate synthetic submissions only if we don't already have them
+          if (submissions.length === 0) {
+            const syntheticData = generateSyntheticSubmissions();
+            dispatch(fetchSubmissionsSuccess(syntheticData));
+          }
+        } else {
+          // For live mode, attempt to fetch real data
+          try {
+            dispatch(fetchSubmissionsStart());
+            
+            // Try to get real reports data
+            const reports = await apiService.getReports();
+            if (reports) {
+              // Ensure reports has the required submissionTrends structure
+              const sanitizedReports = {
+                ...defaultDashboardData,
+                ...reports
+              };
+              setDashboardData(sanitizedReports);
+            }
+            
+            // Try to get real submissions data
+            const submissionsData = await apiService.getSubmissions();
+            if (submissionsData && submissionsData.length > 0) {
+              dispatch(fetchSubmissionsSuccess(submissionsData));
+            } else {
+              throw new Error('No submissions data returned');
+            }
+          } catch (apiError) {
+            console.error('API Error:', apiError);
+            // Fall back to demo data if API fails
+            setDashboardData(defaultDashboardData);
+            const syntheticData = generateSyntheticSubmissions();
+            dispatch(fetchSubmissionsSuccess(syntheticData));
+          }
+        }
+        
+        setInitialized(true);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        setError(errorMessage);
+        dispatch(fetchSubmissionsFailure(errorMessage));
+        
+        // Even in error case, try to show demo data
+        setDashboardData(defaultDashboardData);
+        if (submissions.length === 0) {
+          const syntheticData = generateSyntheticSubmissions();
+          dispatch(fetchSubmissionsSuccess(syntheticData));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [
+    dispatch, 
+    isDemoMode, 
+    loading, 
+    submissionsLoading, 
+    initialized, 
+    submissions.length, 
+    generateSyntheticSubmissions
+  ]);
 
   // Handler for metric card clicks to navigate to filtered submissions
   const handleMetricClick = (status: string) => {
@@ -265,10 +322,9 @@ const Dashboard: React.FC = () => {
       navigate(`/submissions?status=${status}`);
     }
   };
-  
+
   // Handler for "View all alerts" click
   const handleViewAllAlertsClick = () => {
-    // Navigate to a page that shows all alerts (you'll need to create this route)
     navigate('/alerts');
   };
 
@@ -304,7 +360,7 @@ const Dashboard: React.FC = () => {
         Insurance Monitoring Dashboard
       </Typography>
       
-      {loading && (
+      {(loading || submissionsLoading) && (
         <Box display="flex" justifyContent="center" my={4}>
           <CircularProgress />
         </Box>
@@ -316,7 +372,7 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
       
-      {!loading && !error && (
+      {!loading && !submissionsLoading && (
         <>
           {/* Metrics Overview */}
           <Grid container spacing={3} mb={4}>
@@ -391,12 +447,49 @@ const Dashboard: React.FC = () => {
             </Grid>
             
             <Grid item xs={12} md={6}>
-              {/* Replaced Submission Trends chart with Audit Alerts component */}
-              <AuditAlerts 
-                alerts={auditAlerts} 
-                totalAlerts={totalAlerts}
-                onViewAllClick={handleViewAllAlertsClick}
-              />
+              {/* Audit Alerts section */}
+              <Paper sx={{ p: 2, height: '100%' }}>
+                <Typography variant="h5" gutterBottom>
+                  Audit Alerts
+                </Typography>
+                
+                <Box sx={{ my: 2 }}>
+                  {auditAlerts.map((alert, index) => (
+                    <Card 
+                      key={index} 
+                      sx={{ 
+                        mb: 2, 
+                        bgcolor: alert.color,
+                        '&:last-child': { mb: 0 }
+                      }}
+                    >
+                      <CardContent sx={{ py: 2 }}>
+                        <Typography variant="h6" gutterBottom>
+                          {alert.title}
+                        </Typography>
+                        <Typography variant="body1">
+                          {alert.description}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+                
+                <Box 
+                  sx={{ 
+                    p: 2, 
+                    bgcolor: '#e3f2fd', 
+                    borderRadius: 1, 
+                    textAlign: 'center',
+                    cursor: 'pointer'
+                  }}
+                  onClick={handleViewAllAlertsClick}
+                >
+                  <Typography variant="body1" color="primary">
+                    View all 8 alerts...
+                  </Typography>
+                </Box>
+              </Paper>
             </Grid>
           </Grid>
           

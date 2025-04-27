@@ -8,7 +8,11 @@ import apiService from '../../services/api/apiService';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clearSelectedSubmission } from '../../store/slices/submissionSlice';
 
-const ModeSwitcher: React.FC = () => {
+interface ModeSwitcherProps {
+  compact?: boolean;
+}
+
+const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ compact = false }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,6 +42,23 @@ const ModeSwitcher: React.FC = () => {
     console.log(`Mode changed to ${newMode ? 'Demo' : 'Live'}`);
   };
 
+  if (compact) {
+    return (
+      <FormControlLabel
+        control={
+          <Switch
+            checked={isDemoMode}
+            onChange={handleModeChange}
+            color="primary"
+            size="small"
+          />
+        }
+        label="Live"
+        sx={{ mr: 1, '& .MuiTypography-root': { fontSize: '0.75rem' } }}
+      />
+    );
+  }
+
   return (
     <Box mb={3} p={2} bgcolor="#f5f5f5" borderRadius={1}>
       <FormControlLabel
@@ -53,11 +74,11 @@ const ModeSwitcher: React.FC = () => {
             <Typography variant="subtitle1" component="span">
               {isDemoMode ? 'Demo Mode' : 'Live Mode'}
             </Typography>
-            <Typography variant="body2" color="textSecondary">
-              {isDemoMode 
-                ? 'Using mock data for demonstration' 
-                : `Connected to API at ${apiEndpoint}`}
-            </Typography>
+            {!isDemoMode && (
+              <Typography variant="body2" color="textSecondary">
+                Connected to API at {apiEndpoint}
+              </Typography>
+            )}
           </Box>
         }
       />

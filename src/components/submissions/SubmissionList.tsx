@@ -34,7 +34,6 @@ import {
   fetchSubmissionsFailure 
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
-import ModeSwitcher from '../core/ModeSwitcher';
 
 const SubmissionList: React.FC = () => {
   const dispatch = useDispatch();
@@ -156,8 +155,6 @@ const SubmissionList: React.FC = () => {
           Insurance Submissions {statusFilter !== 'all' && `- ${statusFilter}`}
         </Typography>
       </Box>
-      
-      <ModeSwitcher />
       
       {loading && (
         <Box display="flex" justifyContent="center" my={4}>
