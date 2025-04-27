@@ -1,396 +1,219 @@
 // src/services/mock/mockData.ts
 import { SubmissionData, ComplianceCheckResult, SubmissionDetail } from '../../types';
 
-// Mock submission data
-export const mockSubmissions: SubmissionData[] = [
-  {
-    submissionId: 'SUB20250426-001',
-    timestamp: '2025-04-20T14:30:45Z',
+// Configure the exact counts to match dashboard metrics
+const TOTAL_SUBMISSIONS = 42;
+const COMPLIANT_SUBMISSIONS = 28;
+const AT_RISK_SUBMISSIONS = 10;
+const NON_COMPLIANT_SUBMISSIONS = 4;
+
+// Generate random date within past month
+const randomRecentDate = () => {
+  const now = new Date();
+  const pastDate = new Date();
+  pastDate.setDate(now.getDate() - Math.floor(Math.random() * 30));
+  return pastDate.toISOString();
+};
+
+// Generate random submission ID
+const generateSubmissionId = () => {
+  return `SUB${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+};
+
+// Sample industry data for creating varied submissions
+const industries = [
+  { code: '332999', description: 'All Other Miscellaneous Fabricated Metal Product Manufacturing' },
+  { code: '448120', description: 'Family Clothing Stores' },
+  { code: '541511', description: 'Custom Computer Programming Services' },
+  { code: '722511', description: 'Full-Service Restaurants' },
+  { code: '236220', description: 'Commercial Building Construction' },
+  { code: '621111', description: 'Offices of Physicians' },
+  { code: '522110', description: 'Commercial Banking' },
+  { code: '484121', description: 'General Freight Trucking, Long-Distance' },
+  { code: '611310', description: 'Colleges and Universities' },
+  { code: '721110', description: 'Hotels and Motels' }
+];
+
+// Sample broker data
+const brokers = [
+  { name: 'Marsh Insurance Brokers', email: 'john.smith@marsh.com' },
+  { name: 'Willis Towers Watson', email: 'sarah.johnson@willistowerswatson.com' },
+  { name: 'Aon Risk Solutions', email: 'mark.chen@aon.com' },
+  { name: 'Gallagher Insurance', email: 'jennifer.adams@gallagher.com' },
+  { name: 'HUB International', email: 'robert.miller@hubinternational.com' }
+];
+
+// Sample company names
+const companyNames = [
+  'Acme Manufacturing Inc.',
+  'Urban Outfitters Group LLC',
+  'NextGen Software Solutions Inc.',
+  'Riverdale Healthcare Partners',
+  'Consolidated Building Services',
+  'Atlantic Shipping & Logistics',
+  'Summit Financial Holdings',
+  'Harvest Valley Foods',
+  'Pinnacle Energy Systems',
+  'Global Hospitality Group'
+];
+
+// Helper function to create a submission with a specific status
+const createMockSubmission = (status: string, index: number): SubmissionData => {
+  const industryIndex = index % industries.length;
+  const brokerIndex = index % brokers.length;
+  const companyIndex = index % companyNames.length;
+  
+  return {
+    submissionId: `SUB${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(index + 100).padStart(3, '0')}`,
+    timestamp: randomRecentDate(),
     broker: {
-      name: 'Marsh Insurance Brokers',
-      email: 'john.smith@marsh.com'
+      name: brokers[brokerIndex].name,
+      email: brokers[brokerIndex].email
     },
     insured: {
-      name: 'Acme Manufacturing Inc.',
+      name: `${companyNames[companyIndex]} ${String.fromCharCode(65 + (index % 26))}`,
       industry: {
-        code: '332999',
-        description: 'All Other Miscellaneous Fabricated Metal Product Manufacturing'
+        code: industries[industryIndex].code,
+        description: industries[industryIndex].description
       },
       address: {
-        street: '123 Industrial Parkway',
-        city: 'Cleveland',
-        state: 'OH',
-        zip: '44115'
+        street: `${1000 + index} Business St`,
+        city: ['New York', 'Chicago', 'Los Angeles', 'Houston', 'Miami', 'Boston', 'Atlanta'][index % 7],
+        state: ['NY', 'IL', 'CA', 'TX', 'FL', 'MA', 'GA'][index % 7],
+        zip: String(10000 + (index * 100))
       },
-      yearsInBusiness: 27,
-      employeeCount: 215
+      yearsInBusiness: 5 + (index % 20),
+      employeeCount: 50 + (index * 25)
     },
     coverage: {
-      lines: ['Property', 'General Liability'],
-      effectiveDate: '2025-06-01',
-      expirationDate: '2026-06-01'
-    },
-    exposure: {
-      property: {
-        tiv: 35000000,
-        locationsCount: 2
-      },
-      generalLiability: {
-        limits: {
-          eachOccurrence: 1000000,
-          generalAggregate: 2000000
-        }
-      }
+      lines: ['Property', 'General Liability', 'Workers Compensation', 'Professional Liability'].slice(0, 1 + (index % 3)),
+      effectiveDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
+      expirationDate: new Date(new Date().getFullYear() + 1, new Date().getMonth() + 1, 1).toISOString()
     },
     documents: [
       {
-        id: 'doc-001',
-        name: 'ACORD 125.pdf',
+        id: `doc-${index * 3 + 1}`,
+        name: 'Application.pdf',
         type: 'application',
         contentType: 'application/pdf',
-        size: 245789,
-        status: 'processed'
+        status: 'processed',
+        size: 250000 + (index * 1000)
       },
       {
-        id: 'doc-002',
+        id: `doc-${index * 3 + 2}`,
         name: 'Loss Runs.pdf',
         type: 'lossHistory',
         contentType: 'application/pdf',
-        size: 389012,
-        status: 'processed'
+        status: 'processed',
+        size: 350000 + (index * 1000)
       },
       {
-        id: 'doc-003',
+        id: `doc-${index * 3 + 3}`,
         name: 'Financial Statements.pdf',
         type: 'financials',
         contentType: 'application/pdf',
-        size: 512456,
-        status: 'processed'
+        status: 'processed',
+        size: 450000 + (index * 1000)
       }
     ],
-    status: 'In Review'
-  },
-  // Add the retail submission
-  {
-    submissionId: 'SUB20250426-002',
-    timestamp: '2025-04-22T10:15:30Z',
-    broker: {
-      name: 'Willis Towers Watson',
-      email: 'sarah.johnson@willistowerswatson.com'
-    },
-    insured: {
-      name: 'Urban Outfitters Group LLC',
-      industry: {
-        code: '448120',
-        description: 'Family Clothing Stores'
-      },
-      address: {
-        street: '500 Fashion Avenue',
-        city: 'Atlanta',
-        state: 'GA',
-        zip: '30303'
-      },
-      yearsInBusiness: 12,
-      employeeCount: 350
-    },
-    coverage: {
-      lines: ['Property', 'General Liability'],
-      effectiveDate: '2025-07-15',
-      expirationDate: '2026-07-15'
-    },
-    exposure: {
-      property: {
-        tiv: 48000000,
-        locationsCount: 10
-      },
-      generalLiability: {
-        limits: {
-          eachOccurrence: 2000000,
-          generalAggregate: 4000000
-        }
-      }
-    },
-    documents: [
-      {
-        id: 'doc-004',
-        name: 'ACORD 125.pdf',
-        type: 'application',
-        contentType: 'application/pdf',
-        size: 278943,
-        status: 'processed'
-      },
-      {
-        id: 'doc-005',
-        name: 'Urban_Loss_History_2020-2025.pdf',
-        type: 'lossHistory',
-        contentType: 'application/pdf',
-        size: 412678,
-        status: 'processed'
-      },
-      {
-        id: 'doc-006',
-        name: 'Urban_Financials_2022-2024.pdf',
-        type: 'financials',
-        contentType: 'application/pdf',
-        size: 583921,
-        status: 'processed'
-      }
-    ],
-    status: 'At Risk'
-  },
-  // Add the tech company submission
-  {
-    submissionId: 'SUB20250426-003',
-    timestamp: '2025-04-25T09:45:22Z',
-    broker: {
-      name: 'Aon Risk Solutions',
-      email: 'mark.chen@aon.com'
-    },
-    insured: {
-      name: 'NextGen Software Solutions Inc.',
-      industry: {
-        code: '541511',
-        description: 'Custom Computer Programming Services'
-      },
-      address: {
-        street: '789 Tech Parkway',
-        city: 'Boston',
-        state: 'MA',
-        zip: '02110'
-      },
-      yearsInBusiness: 8,
-      employeeCount: 125
-    },
-    coverage: {
-      lines: ['Property', 'General Liability'],
-      effectiveDate: '2025-08-01',
-      expirationDate: '2026-08-01'
-    },
-    exposure: {
-      property: {
-        tiv: 12500000,
-        locationsCount: 1
-      },
-      generalLiability: {
-        limits: {
-          eachOccurrence: 1000000,
-          generalAggregate: 2000000
-        }
-      }
-    },
-    documents: [
-      {
-        id: 'doc-007',
-        name: 'ACORD 125.pdf',
-        type: 'application',
-        contentType: 'application/pdf',
-        size: 198742,
-        status: 'processed'
-      },
-      {
-        id: 'doc-008',
-        name: 'NextGen_Loss_Runs_2020-2025.pdf',
-        type: 'lossHistory',
-        contentType: 'application/pdf',
-        size: 156789,
-        status: 'processed'
-      },
-      {
-        id: 'doc-009',
-        name: 'NextGen_Financial_Statement_2024.pdf',
-        type: 'financials',
-        contentType: 'application/pdf',
-        size: 432156,
-        status: 'processed'
-      }
-    ],
-    status: 'Compliant'
-  }
-];
-
-// Compliance check mock data for detailed views
-export const mockComplianceChecks: { [key: string]: ComplianceCheckResult[] } = {
-  'SUB20250426-001': [
-    {
-      checkId: 'DOC-001',
-      category: 'Document Completeness',
-      status: 'compliant',
-      findings: 'All required submission documents were received and properly indexed.',
-      timestamp: '2025-04-20T14:45:12Z',
-      dataPoints: {
-        requiredDocuments: 3,
-        receivedDocuments: 3
-      }
-    },
-    {
-      checkId: 'APP-001',
-      category: 'Risk Appetite Alignment',
-      status: 'compliant',
-      findings: 'The manufacturing risk is within appetite for both Property and GL lines.',
-      timestamp: '2025-04-20T14:46:30Z',
-      dataPoints: {
-        industryCode: '332999',
-        riskAppetite: 'Standard'
-      }
-    },
-    {
-      checkId: 'FIN-001',
-      category: 'Financial Strength Analysis',
-      status: 'compliant',
-      findings: 'Financial metrics exceed minimum requirements with positive net income, strong current ratio of 1.8, and solid D&B rating.',
-      timestamp: '2025-04-20T14:47:15Z',
-      dataPoints: {
-        currentRatio: 1.8,
-        debtToEquityRatio: 0.6,
-        dbRating: '3A2'
-      }
-    },
-    {
-      checkId: 'LOSS-001',
-      category: 'Loss History Analysis',
-      status: 'compliant',
-      findings: 'Loss history is within acceptable parameters with loss ratios below thresholds and claim frequency within guidelines.',
-      timestamp: '2025-04-20T14:48:22Z',
-      dataPoints: {
-        lossRatio: 12.5,
-        claimFrequency: 0.4,
-        largestLoss: 85000
-      }
-    }
-  ],
-  'SUB20250426-002': [
-    {
-      checkId: 'DOC-001',
-      category: 'Document Completeness',
-      status: 'compliant',
-      findings: 'All required submission documents were received and properly indexed.',
-      timestamp: '2025-04-22T10:25:18Z',
-      dataPoints: {
-        requiredDocuments: 3,
-        receivedDocuments: 3
-      }
-    },
-    {
-      checkId: 'APP-001',
-      category: 'Risk Appetite Alignment',
-      status: 'compliant',
-      findings: 'Retail clothing store is within appetite for both Property and GL lines.',
-      timestamp: '2025-04-22T10:26:45Z',
-      dataPoints: {
-        industryCode: '448120',
-        riskAppetite: 'Preferred'
-      }
-    },
-    {
-      checkId: 'FIN-001',
-      category: 'Financial Strength Analysis',
-      status: 'compliant',
-      findings: 'Financial metrics exceed minimum requirements with strong growth trends and solid D&B rating.',
-      timestamp: '2025-04-22T10:27:30Z',
-      dataPoints: {
-        currentRatio: 2.1,
-        debtToEquityRatio: 0.8,
-        dbRating: '2A3'
-      }
-    },
-    {
-      checkId: 'LOSS-001',
-      category: 'Loss History Analysis',
-      status: 'attention',
-      findings: 'Property loss trend shows increasing frequency with 4 claims in 5 years, which approaches the threshold. Recent GL claim of $150,000 still open.',
-      timestamp: '2025-04-22T10:28:15Z',
-      dataPoints: {
-        lossRatio: 16.0,
-        claimFrequency: 0.8,
-        largestLoss: 175000
-      }
-    },
-    {
-      checkId: 'CAT-001',
-      category: 'CAT Exposure Analysis',
-      status: 'attention',
-      findings: 'Multiple locations in Florida with potential hurricane exposure. Tampa location had significant hurricane loss in 2022.',
-      timestamp: '2025-04-22T10:29:05Z',
-      dataPoints: {
-        catExposure: 'Hurricane',
-        locationsAffected: 3,
-        priorCatLoss: true
-      }
-    }
-  ],
-  'SUB20250426-003': [
-    {
-      checkId: 'DOC-001',
-      category: 'Document Completeness',
-      status: 'compliant',
-      findings: 'All required submission documents were received and properly indexed.',
-      timestamp: '2025-04-25T09:55:12Z',
-      dataPoints: {
-        requiredDocuments: 3,
-        receivedDocuments: 3
-      }
-    },
-    {
-      checkId: 'APP-001',
-      category: 'Risk Appetite Alignment',
-      status: 'compliant',
-      findings: 'Software development and IT consulting is within appetite for both Property and GL lines.',
-      timestamp: '2025-04-25T09:56:30Z',
-      dataPoints: {
-        industryCode: '541511',
-        riskAppetite: 'Preferred'
-      }
-    },
-    {
-      checkId: 'FIN-001',
-      category: 'Financial Strength Analysis',
-      status: 'compliant',
-      findings: 'Excellent financial metrics with strong growth, high profitability, and solid D&B rating.',
-      timestamp: '2025-04-25T09:57:45Z',
-      dataPoints: {
-        currentRatio: 3.2,
-        debtToEquityRatio: 0.2,
-        dbRating: '2A2'
-      }
-    },
-    {
-      checkId: 'LOSS-001',
-      category: 'Loss History Analysis',
-      status: 'compliant',
-      findings: 'Excellent loss history with only one minor property claim and no GL claims in 5 years.',
-      timestamp: '2025-04-25T09:58:22Z',
-      dataPoints: {
-        lossRatio: 2.4,
-        claimFrequency: 0.2,
-        largestLoss: 15000
-      }
-    },
-    {
-      checkId: 'LOC-001',
-      category: 'Location Analysis',
-      status: 'attention',
-      findings: 'Boston location is within 2 miles of coast. While not in flood zone V, coastal proximity requires review for windstorm/flood exposure.',
-      timestamp: '2025-04-25T09:59:10Z',
-      dataPoints: {
-        distanceToCoast: 2,
-        floodZone: 'X',
-        windExposure: 'Medium'
-      }
-    },
-    {
-      checkId: 'PROF-001',
-      category: 'Professional Liability Exposure',
-      status: 'attention',
-      findings: 'As a software developer and IT consultant, professional liability exposure exists but is excluded under GL policy. Ensure GL-PROFES-2025 exclusion is attached.',
-      timestamp: '2025-04-25T10:00:05Z',
-      dataPoints: {
-        professionalExposure: true,
-        exclusionForm: 'GL-PROFES-2025',
-        crossSellOpportunity: 'Professional Liability'
-      }
-    }
-  ]
+    status: status
+  };
 };
+
+// Generate mock submissions
+let mockSubmissionsData: SubmissionData[] = [];
+
+// Generate Compliant submissions
+for (let i = 0; i < COMPLIANT_SUBMISSIONS; i++) {
+  mockSubmissionsData.push(createMockSubmission('Compliant', i));
+}
+
+// Generate At Risk submissions
+for (let i = 0; i < AT_RISK_SUBMISSIONS; i++) {
+  mockSubmissionsData.push(createMockSubmission('At Risk', i + COMPLIANT_SUBMISSIONS));
+}
+
+// Generate Non-Compliant submissions
+for (let i = 0; i < NON_COMPLIANT_SUBMISSIONS; i++) {
+  mockSubmissionsData.push(createMockSubmission('Non-Compliant', i + COMPLIANT_SUBMISSIONS + AT_RISK_SUBMISSIONS));
+}
+
+// Export the mock submissions
+export const mockSubmissions: SubmissionData[] = mockSubmissionsData;
+
+// Create basic compliance checks for each submission
+export const mockComplianceChecks: { [key: string]: ComplianceCheckResult[] } = {};
+
+// Generate compliance checks for each submission
+mockSubmissions.forEach(submission => {
+  const status = submission.status.toLowerCase();
+  let checks: ComplianceCheckResult[] = [];
+  
+  // Always include document completeness check
+  checks.push({
+    checkId: `DOC-${submission.submissionId}`,
+    category: 'Document Completeness',
+    status: 'compliant',
+    findings: 'All required submission documents were received and properly indexed.',
+    timestamp: submission.timestamp,
+    dataPoints: {
+      requiredDocuments: 3,
+      receivedDocuments: 3
+    }
+  });
+  
+  // Add risk appetite check based on status
+  checks.push({
+    checkId: `APP-${submission.submissionId}`,
+    category: 'Risk Appetite Alignment',
+    status: status === 'compliant' ? 'compliant' : (status === 'at risk' ? 'attention' : 'non-compliant'),
+    findings: status === 'compliant' 
+      ? `${submission.insured.industry.description} is within appetite for the requested lines of business.` 
+      : `${submission.insured.industry.description} has risk factors that require additional review.`,
+    timestamp: submission.timestamp,
+    dataPoints: {
+      industryCode: submission.insured.industry.code,
+      riskAppetite: status === 'compliant' ? 'Standard' : (status === 'at risk' ? 'Restricted' : 'Declined')
+    }
+  });
+  
+  // Add financial check
+  checks.push({
+    checkId: `FIN-${submission.submissionId}`,
+    category: 'Financial Strength Analysis',
+    status: status === 'non-compliant' ? 'non-compliant' : 'compliant',
+    findings: status === 'compliant' 
+      ? 'Financial metrics exceed minimum requirements with positive net income and strong current ratio.'
+      : 'Financial metrics indicate potential concerns that need to be addressed.',
+    timestamp: submission.timestamp,
+    dataPoints: {
+      currentRatio: status === 'compliant' ? 1.8 : 0.9,
+      debtToEquityRatio: status === 'compliant' ? 0.6 : 1.5,
+      dbRating: status === 'compliant' ? '3A2' : '1R2'
+    }
+  });
+  
+  // Add checks that match the submission's status
+  if (status === 'at risk' || status === 'non-compliant') {
+    checks.push({
+      checkId: `LOSS-${submission.submissionId}`,
+      category: 'Loss History Analysis',
+      status: status === 'at risk' ? 'attention' : 'non-compliant',
+      findings: status === 'at risk'
+        ? 'Loss history shows an increasing trend that requires further review.'
+        : 'Loss history exceeds acceptable thresholds for underwriting.',
+      timestamp: submission.timestamp,
+      dataPoints: {
+        lossRatio: status === 'at risk' ? 22.5 : 45.8,
+        claimFrequency: status === 'at risk' ? 0.8 : 2.1,
+        largestLoss: status === 'at risk' ? 150000 : 500000
+      }
+    });
+  }
+  
+  // Store checks for this submission
+  mockComplianceChecks[submission.submissionId] = checks;
+});
 
 // Helper function to get full submission details
 export const getMockSubmissionDetail = (id: string): SubmissionDetail | undefined => {

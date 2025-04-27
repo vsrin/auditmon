@@ -18,7 +18,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Chip
+  Chip,
+  Button
 } from '@mui/material';
 import {
   PieChart,
@@ -27,10 +28,12 @@ import {
   ResponsiveContainer,
   Tooltip
 } from 'recharts';
+import { Settings as SettingsIcon } from '@mui/icons-material';
 import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
 import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
 import { SubmissionData } from '../../types';
+import { mockSubmissions } from '../../services/mock/mockData'; // Import mock data
 
 // Styled components for metrics cards
 const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
@@ -115,13 +118,20 @@ const Dashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<any>(defaultDashboardData);
   const [initialized, setInitialized] = useState(false);
 
-  // Demo mode metrics - these should match exactly with what's displayed on the cards
-  const totalSubmissions = 42;
-  const compliantSubmissions = 28;
-  const atRiskSubmissions = 10;
-  const nonCompliantSubmissions = 4;
+  // Calculate metrics based on the mockSubmissions data for demo mode
+  // For live mode, use the actual submissions data
+  const totalSubmissions = isDemoMode ? mockSubmissions.length : submissions.length;
+  const compliantSubmissions = isDemoMode 
+    ? mockSubmissions.filter(sub => sub.status === 'Compliant').length 
+    : submissions.filter(sub => sub.status === 'Compliant').length;
+  const atRiskSubmissions = isDemoMode
+    ? mockSubmissions.filter(sub => sub.status === 'At Risk').length
+    : submissions.filter(sub => sub.status === 'At Risk').length;
+  const nonCompliantSubmissions = isDemoMode
+    ? mockSubmissions.filter(sub => sub.status === 'Non-Compliant').length
+    : submissions.filter(sub => sub.status === 'Non-Compliant').length;
 
-  // Sample audit control data - matches your screenshot
+  // Sample audit control data - could also be calculated from mock data
   const auditControlData = [
     { name: 'Documents Complete', value: 75 },
     { name: 'In Risk Appetite', value: 25 },
@@ -129,114 +139,23 @@ const Dashboard: React.FC = () => {
     { name: 'Needs Financial Review', value: 0 }
   ];
 
-  // Generate synthetic submissions - defined as memoized function to prevent recreation
+  // Generate synthetic submissions - use mockSubmissions directly
   const generateSyntheticSubmissions = useCallback((): SubmissionData[] => {
-    console.log("Generating synthetic submissions");
-    // Create company names for our synthetic data
-    const companies = [
-      { name: 'Acme Manufacturing Inc.', industry: 'Manufacturing' },
-      { name: 'TechNova Solutions', industry: 'Technology' },
-      { name: 'Retail Horizons Group', industry: 'Retail' },
-      { name: 'BuildRight Construction', industry: 'Construction' },
-      { name: 'HealthPlus Medical Services', industry: 'Healthcare' },
-      { name: 'TransGlobal Logistics', industry: 'Transportation' },
-      { name: 'EnergyWorks Utilities', industry: 'Energy' },
-      { name: 'FoodWise Distributors', industry: 'Food Services' },
-      { name: 'FinServe Banking Corp', industry: 'Financial Services' },
-      { name: 'Hospitality Suites Inc', industry: 'Hospitality' }
-    ];
-    
-    // Create an empty array for our submissions
-    const syntheticSubmissions: SubmissionData[] = [];
-    
-    // Helper to create a submission with specified status
-    const createSubmission = (status: string, index: number): SubmissionData => {
-      const company = companies[index % companies.length];
-      const today = new Date();
-      const submissionDate = new Date(today);
-      submissionDate.setDate(today.getDate() - (index % 30)); // Spread dates over last month
-      
-      return {
-        submissionId: `SUB${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
-        timestamp: submissionDate.toISOString(),
-        broker: {
-          name: `Broker ${String.fromCharCode(65 + (index % 26))} Partners`,
-          email: `broker${index}@example.com`
-        },
-        insured: {
-          name: company.name,
-          industry: {
-            code: String(1000 + index),
-            description: company.industry
-          },
-          address: {
-            street: `${1000 + index} Business St`,
-            city: ['New York', 'Chicago', 'Los Angeles', 'Houston', 'Miami'][index % 5],
-            state: ['NY', 'IL', 'CA', 'TX', 'FL'][index % 5],
-            zip: String(10000 + (index * 100))
-          },
-          yearsInBusiness: 5 + (index % 20),
-          employeeCount: 50 + (index * 25)
-        },
-        coverage: {
-          lines: ['Property', 'General Liability', 'Workers Compensation'].slice(0, 1 + (index % 3)),
-          effectiveDate: new Date(today.getFullYear(), today.getMonth() + 1, 1).toISOString(),
-          expirationDate: new Date(today.getFullYear() + 1, today.getMonth() + 1, 1).toISOString()
-        },
-        documents: [
-          {
-            id: `doc-${index * 3 + 1}`,
-            name: 'Application.pdf',
-            type: 'application',
-            status: 'processed',
-            size: 250000 + (index * 1000)
-          },
-          {
-            id: `doc-${index * 3 + 2}`,
-            name: 'Loss Runs.pdf',
-            type: 'loss_runs',
-            status: 'processed',
-            size: 350000 + (index * 1000)
-          },
-          {
-            id: `doc-${index * 3 + 3}`,
-            name: 'Financial Statements.pdf',
-            type: 'financial',
-            status: 'processed',
-            size: 450000 + (index * 1000)
-          }
-        ],
-        status: status
-      };
-    };
-    
-    // Create compliant submissions
-    for (let i = 0; i < compliantSubmissions; i++) {
-      syntheticSubmissions.push(createSubmission('Compliant', i));
-    }
-    
-    // Create at-risk submissions
-    for (let i = 0; i < atRiskSubmissions; i++) {
-      syntheticSubmissions.push(createSubmission('At Risk', i + compliantSubmissions));
-    }
-    
-    // Create non-compliant submissions
-    for (let i = 0; i < nonCompliantSubmissions; i++) {
-      syntheticSubmissions.push(createSubmission('Non-Compliant', i + compliantSubmissions + atRiskSubmissions));
-    }
-    
-    return syntheticSubmissions;
-  }, [compliantSubmissions, atRiskSubmissions, nonCompliantSubmissions]);
+    console.log("Using mock submissions data");
+    return mockSubmissions;
+  }, []);
 
   // Load dashboard data only once on mount or when mode changes
   useEffect(() => {
     const loadDashboardData = async () => {
-      if (initialized && !isDemoMode) {
-        return; // Skip if already initialized in live mode
+      // If we're already loading, skip
+      if (loading || submissionsLoading) {
+        return;
       }
 
-      if (loading || submissionsLoading) {
-        return; // Skip if already loading
+      // If we already have data and mode hasn't changed, skip
+      if (initialized && submissions.length > 0) {
+        return;
       }
 
       console.log("Loading dashboard data, isDemoMode:", isDemoMode);
@@ -328,6 +247,11 @@ const Dashboard: React.FC = () => {
     navigate('/alerts');
   };
 
+  // Handler for Rule Engine Demo button
+  const handleRuleEngineDemoClick = () => {
+    navigate('/alerts?tab=rule-engine');
+  };
+
   // Format date for display
   const formatDate = (dateString: string) => {
     try {
@@ -356,9 +280,19 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Insurance Monitoring Dashboard
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h4" component="h1">
+          Insurance Monitoring Dashboard
+        </Typography>
+        <Button 
+          variant="contained"
+          color="primary"
+          startIcon={<SettingsIcon />}
+          onClick={handleRuleEngineDemoClick}
+        >
+          Rule Engine Demo
+        </Button>
+      </Box>
       
       {(loading || submissionsLoading) && (
         <Box display="flex" justifyContent="center" my={4}>

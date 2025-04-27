@@ -1,5 +1,5 @@
 // src/components/alerts/Alerts.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -16,7 +16,6 @@ import {
   ListItem,
   ListItemText,
   Chip,
-  IconButton as MuiIconButton,
   Alert,
   FormControlLabel,
   Switch,
@@ -26,72 +25,65 @@ import {
   ArrowBack as ArrowBackIcon,
   Settings as SettingsIcon,
   Add as AddIcon,
-  Delete as DeleteIcon,
   Refresh as RefreshIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { fetchSubmissionsSuccess } from '../../store/slices/submissionSlice';
+import { setDemoMode } from '../../store/slices/configSlice';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
+import apiService from '../../services/api/apiService';
 
 // Sample alerts data
 const allAlerts = [
   {
     title: "Missing Financial Documents",
     description: "5 submissions need financial statements",
-    color: "#fff3e0", // Light orange background
-    severity: "warning"
+    color: "#fff3e0" // Light orange background
   },
   {
     title: "Outside Risk Appetite",
     description: "3 submissions in prohibited classes",
-    color: "#ffebee", // Light red background
-    severity: "high"
+    color: "#ffebee" // Light red background
   },
   {
     title: "Incomplete Loss Runs",
     description: "2 submissions have incomplete loss history",
-    color: "#fff3e0", // Light orange background
-    severity: "warning"
+    color: "#fff3e0" // Light orange background
   },
   {
     title: "Missing Underwriting Approval",
     description: "4 submissions pending supervisor review",
-    color: "#e8f5e9", // Light green background
-    severity: "low"
+    color: "#e8f5e9" // Light green background
   },
   {
     title: "Document Processing Failed",
     description: "1 submission with document processing errors",
-    color: "#ffebee", // Light red background
-    severity: "high"
+    color: "#ffebee" // Light red background
   },
   {
     title: "Expired Certificates",
     description: "2 submissions with expired certificates",
-    color: "#fff3e0", // Light orange background
-    severity: "warning"
+    color: "#fff3e0" // Light orange background
   },
   {
     title: "Policy Expiration Approaching",
     description: "7 policies expire within 30 days",
-    color: "#e8f5e9", // Light green background
-    severity: "low"
+    color: "#e8f5e9" // Light green background
   },
   {
     title: "Business Class Review Required",
     description: "3 submissions need business class validation",
-    color: "#fff3e0", // Light orange background
-    severity: "warning"
+    color: "#fff3e0" // Light orange background
   }
 ];
 
 // Demo rules for NAICS code restrictions
 const initialRestrictedCodes = [
-  { code: '6531', description: 'Real Estate' },
-  { code: '7371', description: 'Technology Services' },
-  { code: '3579', description: 'Office Equipment' }
+  { code: '6531', description: 'Real Estate', enabled: true },
+  { code: '7371', description: 'Technology Services', enabled: true },
+  { code: '3579', description: 'Office Equipment', enabled: true }
 ];
 
 interface TabPanelProps {
@@ -122,9 +114,14 @@ function TabPanel(props: TabPanelProps) {
 
 const Alerts: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   const { submissions } = useSelector((state: RootState) => state.submissions);
   const { isDemoMode } = useSelector((state: RootState) => state.config);
+  
+  // Parse URL for tab parameter
+  const searchParams = new URLSearchParams(location.search);
+  const initialTab = searchParams.get('tab') === 'rule-engine' ? 1 : 0;
   
   // Initialize with codes from the rule engine provider if available
   const providerCodes = ruleEngineProvider.getRestrictedNaicsCodes?.() || 
@@ -134,11 +131,12 @@ const Alerts: React.FC = () => {
     const found = initialRestrictedCodes.find(c => c.code === code);
     return found || { 
       code, 
-      description: `Industry with code ${code}` 
+      description: `Industry with code ${code}`,
+      enabled: true 
     };
   });
   
-  const [tabValue, setTabValue] = useState(0);
+  const [tabValue, setTabValue] = useState(initialTab);
   const [restrictedCodes, setRestrictedCodes] = useState(initialCodes);
   const [newCode, setNewCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -149,8 +147,26 @@ const Alerts: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
   const [affectedSubmissions, setAffectedSubmissions] = useState<any[]>([]);
 
+  // Ensure we're in demo mode when component loads
+  useEffect(() => {
+    if (!isDemoMode) {
+      console.log("Switching to demo mode to prevent API errors");
+      dispatch(setDemoMode(true));
+      if (apiService && typeof apiService.setDemoMode === 'function') {
+        apiService.setDemoMode(true);
+      }
+    }
+  }, [dispatch, isDemoMode]);
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    
+    // Update URL when tab changes
+    if (newValue === 1) {
+      navigate('/alerts?tab=rule-engine', { replace: true });
+    } else {
+      navigate('/alerts', { replace: true });
+    }
   };
 
   // Function to add a new restricted NAICS code
@@ -164,7 +180,8 @@ const Alerts: React.FC = () => {
       ...restrictedCodes,
       { 
         code: newCode.trim(), 
-        description: newDescription.trim() || `Industry with code ${newCode.trim()}` 
+        description: newDescription.trim() || `Industry with code ${newCode.trim()}`,
+        enabled: true
       }
     ];
     
@@ -177,14 +194,27 @@ const Alerts: React.FC = () => {
     applyRuleChanges(newRestrictedCodes);
   };
 
-  // Function to remove a restricted NAICS code
-  const handleRemoveCode = (codeToRemove: string) => {
-    const newRestrictedCodes = restrictedCodes.filter(item => item.code !== codeToRemove);
-    setRestrictedCodes(newRestrictedCodes);
-    setMessage({ type: 'info', text: `Removed NAICS code ${codeToRemove} from restricted list` });
+  // Function to toggle individual NAICS code
+  const handleToggleNaicsCode = (code: string, enabled: boolean) => {
+    // Update the restricted codes list
+    const updatedCodes = restrictedCodes.map(item => {
+      if (item.code === code) {
+        return { ...item, enabled };
+      }
+      return item;
+    });
     
-    // Apply the rule changes
-    applyRuleChanges(newRestrictedCodes);
+    setRestrictedCodes(updatedCodes);
+    
+    // Apply rule changes
+    applyRuleChanges(updatedCodes);
+    
+    setMessage({ 
+      type: 'info', 
+      text: enabled 
+        ? `Enabled restriction for NAICS code ${code}` 
+        : `Disabled restriction for NAICS code ${code}` 
+    });
   };
 
   // Function to toggle the rule active state
@@ -233,12 +263,15 @@ const Alerts: React.FC = () => {
   };
 
   // Apply rule changes to submissions
-  const applyRuleChanges = (currentRestrictedCodes: typeof restrictedCodes) => {
+  const applyRuleChanges = useCallback((currentRestrictedCodes: typeof restrictedCodes) => {
     setLoading(true);
     
     try {
+      // Only use enabled codes
+      const enabledCodes = currentRestrictedCodes.filter(item => item.enabled !== false);
+      const restrictedCodeValues = enabledCodes.map(code => code.code);
+      
       // Update the rule engine provider if available
-      const restrictedCodeValues = currentRestrictedCodes.map(code => code.code);
       if (ruleEngineProvider.updateRestrictedNaicsCodes) {
         ruleEngineProvider.updateRestrictedNaicsCodes(restrictedCodeValues);
       }
@@ -247,20 +280,23 @@ const Alerts: React.FC = () => {
         // In demo mode, we'll apply the rules directly to the submission data
         const updatedSubmissions = submissions.map(sub => {
           const industryCode = sub.insured?.industry?.code || '';
-          const isRestricted = currentRestrictedCodes.some(code => code.code === industryCode);
+          const isRestricted = restrictedCodeValues.includes(industryCode);
           
           return {
             ...sub,
-            status: isRestricted ? 'Non-Compliant' : sub.status
+            status: isRestricted ? 'Non-Compliant' : 
+                    (sub.status === 'Non-Compliant' && 
+                     currentRestrictedCodes.some(c => c.code === industryCode && !c.enabled)) ? 
+                    'Compliant' : sub.status
           };
         });
         
         dispatch(fetchSubmissionsSuccess(updatedSubmissions));
-        findAffectedSubmissions(updatedSubmissions, currentRestrictedCodes);
+        findAffectedSubmissions(updatedSubmissions, enabledCodes);
       } else {
         // In live mode, this would call the rule engine API
         console.log('Live mode would call the rule engine API to update rules');
-        findAffectedSubmissions(submissions, isRuleActive ? currentRestrictedCodes : []);
+        findAffectedSubmissions(submissions, isRuleActive ? enabledCodes : []);
       }
     } catch (error) {
       console.error('Error applying rule changes:', error);
@@ -268,10 +304,10 @@ const Alerts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dispatch, isDemoMode, isRuleActive, submissions]);
 
   // Find and display affected submissions after rule changes
-  const findAffectedSubmissions = (subs: any[], codes: typeof restrictedCodes) => {
+  const findAffectedSubmissions = useCallback((subs: any[], codes: typeof restrictedCodes) => {
     if (!isRuleActive || codes.length === 0) {
       setAffectedSubmissions([]);
       return;
@@ -283,17 +319,46 @@ const Alerts: React.FC = () => {
     });
     
     setAffectedSubmissions(affected);
-  };
+  }, [isRuleActive]);
 
   // Initial setup
   useEffect(() => {
-    findAffectedSubmissions(submissions, isRuleActive ? restrictedCodes : []);
-  }, [submissions, isRuleActive, restrictedCodes]);
+    findAffectedSubmissions(
+      submissions, 
+      isRuleActive ? restrictedCodes.filter(c => c.enabled !== false) : []
+    );
+  }, [submissions, isRuleActive, restrictedCodes, findAffectedSubmissions]);
+
+  // Handle navigation safely
+  const handleNavigate = (path: string) => {
+    try {
+      // Try using React Router first
+      navigate(path);
+      
+      // Set a fallback with setTimeout
+      setTimeout(() => {
+        // If we're still on the same page after trying to navigate,
+        // use window.location as a backup
+        if (location.pathname === '/alerts') {
+          window.location.href = path;
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Force navigation with window.location if React Router fails
+      window.location.href = path;
+    }
+  };
 
   return (
     <Box>
       <Box display="flex" alignItems="center" mb={3}>
-        <IconButton edge="start" onClick={() => navigate('/')} sx={{ mr: 1 }}>
+        <IconButton 
+          edge="start" 
+          onClick={() => handleNavigate('/')} 
+          sx={{ mr: 1 }}
+          aria-label="Back to dashboard"
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
@@ -301,7 +366,7 @@ const Alerts: React.FC = () => {
         </Typography>
         <Button 
           variant="contained" 
-          color="primary" 
+          color="success" 
           startIcon={<SettingsIcon />}
           onClick={() => setTabValue(1)}
         >
@@ -314,8 +379,8 @@ const Alerts: React.FC = () => {
         onChange={handleTabChange} 
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        <Tab label="All Alerts" />
-        <Tab label="Rule Engine Demo" />
+        <Tab label="ALL ALERTS" />
+        <Tab label="RULE ENGINE DEMO" />
       </Tabs>
       
       <TabPanel value={tabValue} index={0}>
@@ -372,7 +437,7 @@ const Alerts: React.FC = () => {
             <Grid item xs={12} md={6}>
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">Restricted NAICS Codes</Typography>
+                  <Typography variant="h6">NAICS Code Rule Status</Typography>
                   <FormControlLabel
                     control={
                       <Switch
@@ -387,18 +452,24 @@ const Alerts: React.FC = () => {
                 
                 <Divider sx={{ mb: 2 }} />
                 
-                <List sx={{ mb: 3 }}>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <Typography variant="body2">
+                    Toggle individual NAICS codes below to see how they affect submission compliance.
+                    Changes will be reflected immediately in the dashboard metrics.
+                  </Typography>
+                </Alert>
+                
+                <List>
                   {restrictedCodes.map((item) => (
                     <ListItem
                       key={item.code}
                       secondaryAction={
-                        <MuiIconButton 
-                          edge="end" 
-                          aria-label="delete"
-                          onClick={() => handleRemoveCode(item.code)}
-                        >
-                          <DeleteIcon />
-                        </MuiIconButton>
+                        <Switch
+                          edge="end"
+                          checked={item.enabled !== false} // Default to true if not specified
+                          onChange={(e) => handleToggleNaicsCode(item.code, e.target.checked)}
+                          disabled={!isRuleActive}
+                        />
                       }
                     >
                       <ListItemText
@@ -411,16 +482,9 @@ const Alerts: React.FC = () => {
                       />
                     </ListItem>
                   ))}
-                  
-                  {restrictedCodes.length === 0 && (
-                    <ListItem>
-                      <ListItemText
-                        primary="No restricted NAICS codes"
-                        secondary="Add codes to restrict certain industries"
-                      />
-                    </ListItem>
-                  )}
                 </List>
+                
+                <Divider sx={{ my: 3 }} />
                 
                 <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                   <TextField
@@ -444,7 +508,7 @@ const Alerts: React.FC = () => {
                     variant="contained"
                     startIcon={<AddIcon />}
                     onClick={handleAddCode}
-                    disabled={loading}
+                    disabled={loading || !isRuleActive}
                   >
                     Add Restricted Code
                   </Button>
@@ -457,16 +521,16 @@ const Alerts: React.FC = () => {
                   >
                     Reset to Defaults
                   </Button>
+                  
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    onClick={() => handleNavigate('/')}
+                  >
+                    Return to Dashboard
+                  </Button>
                 </Box>
               </Paper>
-              
-              <Alert severity="info" sx={{ mb: 3 }}>
-                <Typography variant="body2">
-                  This demo shows how the rule engine can dynamically apply compliance rules.
-                  Adding or removing NAICS codes will immediately affect the compliance status
-                  of submissions in those industries.
-                </Typography>
-              </Alert>
             </Grid>
             
             <Grid item xs={12} md={6}>

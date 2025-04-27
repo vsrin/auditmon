@@ -91,6 +91,7 @@ const SubmissionDetail: React.FC = () => {
   const { isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl } = useSelector((state: RootState) => state.config);
   const [tabValue, setTabValue] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [notFoundError, setNotFoundError] = useState<boolean>(false);
 
   // Configure API service and rule engine based on current settings
   useEffect(() => {
@@ -107,17 +108,37 @@ const SubmissionDetail: React.FC = () => {
 
   // Load submission detail
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      console.error("Missing submission ID parameter");
+      navigate('/submissions');
+      return;
+    }
+    
     console.log("Loading submission detail for ID:", id);
     console.log("Using Demo Mode:", isDemoMode);
     console.log("Using Remote Rule Engine:", useRemoteRuleEngine);
 
     const loadSubmissionDetail = async () => {
       dispatch(fetchSubmissionDetailStart());
+      setNotFoundError(false);
+      
       try {
         console.log("Fetching submission data from API service...");
         let data = await apiService.getSubmissionDetail(id);
         console.log("Submission data received:", data);
+        
+        // If no data returned or empty object, show not found error
+        if (!data || Object.keys(data).length === 0) {
+          console.error(`Submission with ID ${id} not found`);
+          setNotFoundError(true);
+          dispatch(fetchSubmissionDetailFailure(`Submission with ID ${id} not found`));
+          return;
+        }
+        
+        // Ensure submissionId is set from URL param if missing
+        if (!data.submissionId) {
+          data.submissionId = id;
+        }
         
         // In demo mode, we already have the compliance checks from mock data
         if (isDemoMode) {
@@ -167,6 +188,12 @@ const SubmissionDetail: React.FC = () => {
       } catch (err) {
         console.error("Error loading submission detail:", err);
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+        
+        // Check if the error indicates the submission wasn't found
+        if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+          setNotFoundError(true);
+        }
+        
         dispatch(fetchSubmissionDetailFailure(errorMessage));
       }
     };
@@ -178,7 +205,7 @@ const SubmissionDetail: React.FC = () => {
       console.log("Cleaning up - clearing selected submission");
       dispatch(clearSelectedSubmission());
     };
-  }, [dispatch, id, isDemoMode, useRemoteRuleEngine]);
+  }, [dispatch, id, isDemoMode, useRemoteRuleEngine, navigate]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -265,7 +292,25 @@ const SubmissionDetail: React.FC = () => {
         </Box>
       )}
 
-      {error && (
+      {notFoundError && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small"
+              onClick={() => navigate('/submissions')}
+            >
+              Go to Submissions
+            </Button>
+          }
+        >
+          Submission with ID {id} not found. The submission may have been deleted or the ID may be incorrect.
+        </Alert>
+      )}
+
+      {error && !notFoundError && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
