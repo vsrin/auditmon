@@ -1,5 +1,5 @@
 // src/services/rules/ruleService.ts
-import { SubmissionDetail, ComplianceCheckResult } from '../../types';
+import { SubmissionDetail, ComplianceCheck } from '../../types';
 
 // Basic rule definitions
 const rules = [
@@ -8,15 +8,15 @@ const rules = [
     category: 'Document Completeness',
     condition: (submission: SubmissionDetail) => {
       // Check if financial statements are present
-      return submission.documents.some(doc => 
-        doc.type.toLowerCase().includes('financial') || 
-        doc.name.toLowerCase().includes('financial')
-      );
+      return submission.documents?.some(doc => 
+        doc.type?.toLowerCase().includes('financial') || 
+        doc.name?.toLowerCase().includes('financial')
+      ) ?? false;
     },
     message: 'Financial statements are required',
     dataPoints: (submission: SubmissionDetail) => ({
       requiredDocuments: 'Financial Statements',
-      availableDocuments: submission.documents.map(d => d.name).join(', ')
+      availableDocuments: submission.documents?.map(d => d.name).join(', ') || 'None'
     })
   },
   {
@@ -25,12 +25,13 @@ const rules = [
     condition: (submission: SubmissionDetail) => {
       // Check for prohibited industry codes
       const prohibitedCodes = ['6532', '7371', '3579']; // Example prohibited codes
-      return !prohibitedCodes.includes(submission.insured.industry.code);
+      const industryCode = submission.insured?.industry?.code || '';
+      return !prohibitedCodes.includes(industryCode);
     },
     message: 'Industry is outside risk appetite guidelines',
     dataPoints: (submission: SubmissionDetail) => ({
-      industryCode: submission.insured.industry.code,
-      industryDescription: submission.insured.industry.description
+      industryCode: submission.insured?.industry?.code || 'Unknown',
+      industryDescription: submission.insured?.industry?.description || 'Unknown'
     })
   },
   {
@@ -52,7 +53,7 @@ const rules = [
 
 // Interface for rule engine response
 interface RuleEngineResponse {
-  checks: ComplianceCheckResult[];
+  checks: ComplianceCheck[];
   overallStatus: string;
 }
 
@@ -61,7 +62,7 @@ class RuleService {
     try {
       console.log('Rule Engine evaluating submission:', submission.submissionId);
       
-      const results: ComplianceCheckResult[] = [];
+      const results: ComplianceCheck[] = [];
       
       // Evaluate each rule
       for (const rule of rules) {
@@ -97,7 +98,7 @@ class RuleService {
   static evaluateSubmissionLocal(submission: SubmissionDetail): RuleEngineResponse {
     console.log('Evaluating submission locally:', submission.submissionId);
     
-    const results: ComplianceCheckResult[] = [];
+    const results: ComplianceCheck[] = [];
     
     // Evaluate each rule
     for (const rule of rules) {

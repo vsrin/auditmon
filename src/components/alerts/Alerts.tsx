@@ -1,6 +1,6 @@
 // src/components/alerts/Alerts.tsx
-import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Tabs, 
@@ -27,6 +27,7 @@ import { RootState } from '../../store';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 import { fetchSubmissionsSuccess, fetchSubmissionsStart } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
+import { Submission, Industry } from '../../types'; // Import the Submission and Industry types
 
 // Define interface for tab panel props
 interface TabPanelProps {
@@ -61,6 +62,7 @@ const initialRestrictedCodes = [
 
 const Alerts: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const { isDemoMode } = useSelector((state: RootState) => state.config);
   const { submissions } = useSelector((state: RootState) => state.submissions);
@@ -70,7 +72,23 @@ const Alerts: React.FC = () => {
   const [isRuleActive, setIsRuleActive] = useState(true);
   const [newCode, setNewCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [affectedSubmissions, setAffectedSubmissions] = useState<any[]>([]);
+  const [affectedSubmissions, setAffectedSubmissions] = useState<Submission[]>([]);
+
+  // Find and display affected submissions after rule changes - moved to useCallback
+  const findAffectedSubmissions = useCallback((subs: Submission[], codes: typeof restrictedCodes) => {
+    if (!isRuleActive || codes.length === 0) {
+      setAffectedSubmissions([]);
+      return;
+    }
+    
+    const affected = subs.filter(sub => {
+      // Fixed: Use optional chaining and type assertion for industry
+      const industryCode = (sub.insured?.industry as Industry)?.code || '';
+      return codes.some(code => code.code === industryCode);
+    });
+    
+    setAffectedSubmissions(affected);
+  }, [isRuleActive]);
 
   // Ensure rule engine provider is synced with current mode
   useEffect(() => {
@@ -91,7 +109,7 @@ const Alerts: React.FC = () => {
     
     // Find affected submissions
     findAffectedSubmissions(submissions, formattedCodes);
-  }, [isDemoMode, submissions]);
+  }, [isDemoMode, submissions, findAffectedSubmissions]);  // Fixed: Added findAffectedSubmissions to dependency array
 
   // Parse tab from URL on component mount
   useEffect(() => {
@@ -107,6 +125,12 @@ const Alerts: React.FC = () => {
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    
+    // Update URL when changing tabs
+    if (newValue === 1) {
+      // For Rule Engine tab, redirect to the dedicated page
+      navigate('/rule-engine');
+    }
   };
 
   // Function to add a new restricted NAICS code
@@ -170,7 +194,8 @@ const Alerts: React.FC = () => {
     } else {
       // For demo mode, we can manually update statuses
       const updatedSubmissions = submissions.map(sub => {
-        const industryCode = sub.insured?.industry?.code || '';
+        // Use type assertion for industry
+        const industryCode = (sub.insured?.industry as Industry)?.code || '';
         const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
         
         // Only reset the status if it was previously marked as non-compliant due to NAICS
@@ -206,21 +231,6 @@ const Alerts: React.FC = () => {
       // Still update the affected submissions display based on current data
       findAffectedSubmissions(submissions, isRuleActive ? currentRestrictedCodes : []);
     }
-  };
-
-  // Find and display affected submissions after rule changes
-  const findAffectedSubmissions = (subs: any[], codes: typeof restrictedCodes) => {
-    if (!isRuleActive || codes.length === 0) {
-      setAffectedSubmissions([]);
-      return;
-    }
-    
-    const affected = subs.filter(sub => {
-      const industryCode = sub.insured?.industry?.code || '';
-      return codes.some(code => code.code === industryCode);
-    });
-    
-    setAffectedSubmissions(affected);
   };
 
   return (
@@ -357,14 +367,14 @@ const Alerts: React.FC = () => {
                             <CardContent sx={{ pb: 1 }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <Box>
-                                  <Typography variant="subtitle1">{sub.insured.name}</Typography>
+                                  <Typography variant="subtitle1">{sub.insured?.name || 'Unknown'}</Typography>
                                   <Typography variant="body2" color="text.secondary">
                                     ID: {sub.submissionId}
                                   </Typography>
                                   <Typography variant="body2">
-                                    Industry: {sub.insured.industry.description} 
+                                    Industry: {sub.insured?.industry?.description || 'Unknown'} 
                                     <Chip 
-                                      label={sub.insured.industry.code} 
+                                      label={sub.insured?.industry?.code || 'Unknown'} 
                                       size="small" 
                                       color="primary" 
                                       sx={{ ml: 1 }} 
@@ -372,7 +382,7 @@ const Alerts: React.FC = () => {
                                   </Typography>
                                 </Box>
                                 <Chip 
-                                  label={sub.status} 
+                                  label={sub.status || 'Unknown'} 
                                   color={sub.status === 'Non-Compliant' ? 'error' : 'default'} 
                                 />
                               </Box>

@@ -1,99 +1,93 @@
 // src/types/index.ts
 
-// Document interface
+// Define industry interface with code property
+export interface Industry {
+  code?: string;
+  description?: string;
+}
+
+// Define address interface
+export interface Address {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
+// Define insured party interface
+export interface Insured {
+  name?: string;
+  industry?: Industry;
+  address?: Address;
+  yearsInBusiness?: number;
+  employeeCount?: number;
+}
+
+// Define broker interface
+export interface Broker {
+  name?: string;
+  code?: string;
+  email?: string; // Added email field to match usage in apiService
+}
+
+// Define coverage interface
+export interface Coverage {
+  lines?: string[];
+  effectiveDate?: string;
+  expirationDate?: string;
+}
+
+// Define document interface
 export interface Document {
   id: string;
-  name: string;
-  type: string;
-  contentType?: string;
-  size: number;
-  status: string;
+  name?: string;
+  type?: string;
+  status?: string;
+  size?: number;
 }
 
-// ComplianceCheck interface
-export interface ComplianceCheckResult {
-  checkId: string;
-  category: string;
-  status: string;
-  timestamp: string;
-  findings: string;
-  dataPoints: Record<string, any>;
+// Define data points interface for compliance checks
+export interface DataPoints {
+  [key: string]: string | number | boolean | null | undefined;
 }
 
-// Basic submission data interface
-export interface SubmissionData {
+// Define compliance check interface
+export interface ComplianceCheck {
+  checkId?: string;
+  category?: string;
+  status?: string;
+  findings?: string;
+  timestamp?: string;
+  dataPoints?: DataPoints;
+}
+
+// Alias ComplianceCheckResult to ComplianceCheck for backward compatibility
+export type ComplianceCheckResult = ComplianceCheck;
+
+// Define base submission interface (used for list view)
+export interface Submission {
   submissionId: string;
+  insured?: Insured;
+  broker?: Broker;
   timestamp: string;
-  broker: {
-    name: string;
-    email?: string;
-  };
-  insured: {
-    name: string;
-    industry: {
-      code: string;
-      description: string;
-    };
-    address: {
-      street: string;
-      city: string;
-      state: string;
-      zip: string;
-    };
-    yearsInBusiness?: number;
-    employeeCount?: number;
-  };
-  coverage: {
-    lines: string[];
-    effectiveDate: string;
-    expirationDate: string;
-  };
-  exposure?: {
-    property?: {
-      tiv: number;
-      locationsCount: number;
-    };
-    generalLiability?: {
-      limits: {
-        eachOccurrence: number;
-        generalAggregate: number;
-      };
-    };
-  };
-  documents: Document[];
-  status: string;
+  status?: string;
 }
 
-// Full submission detail interface
-export interface SubmissionDetail extends SubmissionData {
-  complianceChecks: ComplianceCheckResult[];
+// Alias SubmissionData to Submission for backward compatibility
+export type SubmissionData = Submission;
+
+// Define detailed submission interface (used for detail view)
+export interface SubmissionDetail extends Submission {
+  coverage?: Coverage;
+  documents?: Document[];
+  complianceChecks?: ComplianceCheck[];
 }
 
-// Config state interface
+// Define configuration state interface
 export interface ConfigState {
   isDemoMode: boolean;
   apiEndpoint: string;
   apiMapping: Record<string, any>;
   useRemoteRuleEngine: boolean;
   ruleEngineApiUrl: string;
-}
-
-// Submissions state interface
-export interface SubmissionsState {
-  submissions: SubmissionData[];
-  selectedSubmission: SubmissionDetail | null;
-  loading: boolean;
-  error: string | null;
-}
-
-// Root state interface for Redux
-export interface RootState {
-  config: ConfigState;
-  submissions: SubmissionsState;
-}
-
-// API response interface for handling external API responses
-export interface ApiResponseData {
-  [key: string]: any;
-  compliance_checks?: any[];
 }

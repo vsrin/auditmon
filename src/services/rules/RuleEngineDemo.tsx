@@ -1,5 +1,5 @@
-// src/components/rules/RuleEngineDemo.tsx
-import React, { useState, useEffect } from 'react';
+// src/services/rules/RuleEngineDemo.tsx
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -32,6 +32,7 @@ import apiService from '../../services/api/apiService';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 import { fetchSubmissionsSuccess, fetchSubmissionsStart } from '../../store/slices/submissionSlice';
 import { useLocation } from 'react-router-dom';
+import { Submission, Industry } from '../../types'; // Import the Submission and Industry types
 
 // Demo rules for NAICS code restrictions
 const initialRestrictedCodes = [
@@ -53,7 +54,23 @@ const RuleEngineDemo: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [syncingWithBackend, setSyncingWithBackend] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
-  const [affectedSubmissions, setAffectedSubmissions] = useState<any[]>([]);
+  const [affectedSubmissions, setAffectedSubmissions] = useState<Submission[]>([]);
+
+  // Find and display affected submissions after rule changes - moved to useCallback
+  const findAffectedSubmissions = useCallback((subs: Submission[], codes: typeof restrictedCodes) => {
+    if (!isRuleActive || codes.length === 0) {
+      setAffectedSubmissions([]);
+      return;
+    }
+    
+    const affected = subs.filter(sub => {
+      // Fixed: Use optional chaining and default value
+      const industryCode = sub.insured?.industry?.code || '';
+      return codes.some(code => code.code === industryCode);
+    });
+    
+    setAffectedSubmissions(affected);
+  }, [isRuleActive]);
 
   // Log current mode on mount
   useEffect(() => {
@@ -263,7 +280,8 @@ const RuleEngineDemo: React.FC = () => {
     } else {
       // For demo mode, we can manually update statuses
       const updatedSubmissions = submissions.map(sub => {
-        const industryCode = sub.insured?.industry?.code || '';
+        // Use the properly imported type to ensure code property is available
+        const industryCode = (sub.insured?.industry as Industry)?.code || '';
         const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
         
         // Only reset the status if it was previously marked as non-compliant due to NAICS
@@ -303,25 +321,10 @@ const RuleEngineDemo: React.FC = () => {
     }
   };
 
-  // Find and display affected submissions after rule changes
-  const findAffectedSubmissions = (subs: any[], codes: typeof restrictedCodes) => {
-    if (!isRuleActive || codes.length === 0) {
-      setAffectedSubmissions([]);
-      return;
-    }
-    
-    const affected = subs.filter(sub => {
-      const industryCode = sub.insured?.industry?.code || '';
-      return codes.some(code => code.code === industryCode);
-    });
-    
-    setAffectedSubmissions(affected);
-  };
-
   // Update affected submissions when submissions data changes
   useEffect(() => {
     findAffectedSubmissions(submissions, isRuleActive ? restrictedCodes : []);
-  }, [submissions, isRuleActive, restrictedCodes]);
+  }, [submissions, isRuleActive, restrictedCodes, findAffectedSubmissions]); // Added findAffectedSubmissions to deps
 
   return (
     <Box>
@@ -491,14 +494,14 @@ const RuleEngineDemo: React.FC = () => {
                         <CardContent sx={{ pb: 1 }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <Box>
-                              <Typography variant="subtitle1">{sub.insured.name}</Typography>
+                              <Typography variant="subtitle1">{sub.insured?.name || 'Unknown'}</Typography>
                               <Typography variant="body2" color="text.secondary">
                                 ID: {sub.submissionId}
                               </Typography>
                               <Typography variant="body2">
-                                Industry: {sub.insured.industry.description} 
+                                Industry: {sub.insured?.industry?.description || 'Unknown'} 
                                 <Chip 
-                                  label={sub.insured.industry.code} 
+                                  label={sub.insured?.industry?.code || 'Unknown'} 
                                   size="small" 
                                   color="primary" 
                                   sx={{ ml: 1 }} 
@@ -506,7 +509,7 @@ const RuleEngineDemo: React.FC = () => {
                               </Typography>
                             </Box>
                             <Chip 
-                              label={sub.status} 
+                              label={sub.status || 'Unknown'} 
                               color={sub.status === 'Non-Compliant' ? 'error' : 'default'} 
                             />
                           </Box>

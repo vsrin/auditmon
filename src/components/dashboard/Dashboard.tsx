@@ -1,278 +1,181 @@
 // src/components/dashboard/Dashboard.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   Box,
+  Paper,
+  Typography,
   Card,
   CardContent,
-  Typography,
   Grid,
-  Paper,
-  styled,
   CircularProgress,
   Alert,
+  Chip,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Chip,
-  Button
+  Button,
+  FormControlLabel,
+  Switch,
+  LinearProgress,
 } from '@mui/material';
 import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip
-} from 'recharts';
-import { Settings as SettingsIcon } from '@mui/icons-material';
+  CheckCircleOutline as CheckIcon,
+  WarningOutlined as WarningIcon,
+  ErrorOutline as ErrorIcon,
+  DescriptionOutlined as DocumentIcon,
+  TrendingUp as TrendingUpIcon,
+} from '@mui/icons-material';
 import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
 import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
-import { SubmissionData } from '../../types';
-import { mockSubmissions } from '../../services/mock/mockData'; // Import mock data
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 
-// Styled components for metrics cards
-const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
-  height: '100%',
-  backgroundColor: bgcolor,
-  color: '#fff',
-  transition: 'transform 0.3s',
-  cursor: 'pointer',
-  '&:hover': {
-    transform: 'translateY(-5px)'
-  }
-}));
+// Import interface for AuditAlerts props
+interface AuditAlertsProps {
+  submissions: any[];
+}
 
-// Colors for pie chart
-const COLORS = ['#4dabf5', '#66bb6a', '#ff9800', '#f44336'];
-
-// Label styling for pie chart
-const RADIAN = Math.PI / 180;
-const renderCustomizedLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-  index,
-  name
-}: any) => {
-  // Calculate positioning for label - move it further from the pie
-  const radius = outerRadius * 1.4; // Increase this value to move labels further
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-  // Only render if the segment has a value (percent > 0)
-  if (percent === 0) return null;
-
+// Updated AuditAlerts component to match the image
+const AuditAlerts: React.FC<AuditAlertsProps> = ({ submissions }) => {
+  const navigate = useNavigate();
+  
+  // Count for different alert types
+  const missingFinancialCount = 5; // Hardcoded for demo purposes
+  const outsideRiskCount = 3;      // Hardcoded for demo purposes
+  const totalAlerts = 8;           // Hardcoded for demo purposes
+  
   return (
-    <text
-      x={x}
-      y={y}
-      fill={COLORS[index % COLORS.length]}
-      textAnchor={x > cx ? 'start' : 'end'}
-      dominantBaseline="central"
-      fontWeight="bold"
-      fontSize="14"
-    >
-      {`${name} (${(percent * 100).toFixed(0)}%)`}
-    </text>
+    <Paper sx={{ p: 3, height: '100%' }}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">Audit Alerts</Typography>
+        <Button 
+          variant="text" 
+          color="primary"
+          onClick={() => navigate('/alerts')}
+        >
+          View All
+        </Button>
+      </Box>
+      
+      {/* Missing Financial Documents Alert */}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 2, 
+          mb: 2, 
+          bgcolor: '#FFF8E1',
+          borderRadius: 1,
+          border: '1px solid #FFE082'
+        }}
+      >
+        <Typography variant="h6" sx={{ color: '#5D4037', mb: 1 }}>
+          Missing Financial Documents
+        </Typography>
+        <Typography variant="body1" sx={{ color: '#5D4037' }}>
+          {missingFinancialCount} submissions need financial statements
+        </Typography>
+      </Paper>
+      
+      {/* Outside Risk Appetite Alert */}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 2, 
+          mb: 2, 
+          bgcolor: '#FFEBEE',
+          borderRadius: 1,
+          border: '1px solid #FFCDD2'
+        }}
+      >
+        <Typography variant="h6" sx={{ color: '#C62828', mb: 1 }}>
+          Outside Risk Appetite
+        </Typography>
+        <Typography variant="body1" sx={{ color: '#C62828' }}>
+          {outsideRiskCount} submissions in prohibited classes
+        </Typography>
+      </Paper>
+      
+      {/* View All Alerts Link */}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 2,
+          bgcolor: '#E3F2FD',
+          borderRadius: 1,
+          border: '1px solid #BBDEFB',
+          textAlign: 'center'
+        }}
+      >
+        <Button 
+          color="primary"
+          onClick={() => navigate('/alerts')}
+        >
+          View all {totalAlerts} alerts...
+        </Button>
+      </Paper>
+    </Paper>
   );
 };
-
-// Define this outside the component to prevent recreation on each render
-const defaultDashboardData = {
-  submissionTrends: {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-    data: [12, 19, 13, 25, 22, 42]
-  }
-};
-
-// Audit alerts data
-const auditAlerts = [
-  {
-    title: "Missing Financial Documents",
-    description: "5 submissions need financial statements",
-    color: "#fff3e0" // Light orange background
-  },
-  {
-    title: "Outside Risk Appetite",
-    description: "3 submissions in prohibited classes",
-    color: "#ffebee" // Light red background
-  }
-];
 
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { submissions, loading, error } = useSelector((state: RootState) => state.submissions);
   const { isDemoMode } = useSelector((state: RootState) => state.config);
-  const { submissions, loading: submissionsLoading } = useSelector((state: RootState) => state.submissions);
   
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dashboardData, setDashboardData] = useState<any>(defaultDashboardData);
-  const [initialized, setInitialized] = useState(false);
-
-  // Calculate metrics based on the submissions data
-  const getSubmissionCounts = useCallback(() => {
-    // Ensure we're using either the fetched submissions or mock data if in demo mode
-    const activeSubmissions = submissions.length > 0 ? submissions : (isDemoMode ? mockSubmissions : []);
-    
-    return {
-      total: activeSubmissions.length,
-      compliant: activeSubmissions.filter(sub => sub.status === 'Compliant').length,
-      atRisk: activeSubmissions.filter(sub => sub.status === 'At Risk').length,
-      nonCompliant: activeSubmissions.filter(sub => sub.status === 'Non-Compliant').length
-    };
-  }, [submissions, isDemoMode]);
-
-  const {
-    total: totalSubmissions,
-    compliant: compliantSubmissions,
-    atRisk: atRiskSubmissions,
-    nonCompliant: nonCompliantSubmissions
-  } = getSubmissionCounts();
-
-  // Sample audit control data calculated from actual submissions
-  const getAuditControlData = useCallback(() => {
-    const counts = getSubmissionCounts();
-    
-    return [
-      { name: 'Documents Complete', value: counts.compliant },
-      { name: 'In Risk Appetite', value: counts.total - counts.nonCompliant - counts.atRisk },
-      { name: 'Loss History Issues', value: counts.atRisk },
-      { name: 'Financial Concerns', value: counts.nonCompliant }
-    ];
-  }, [getSubmissionCounts]);
-
-  const auditControlData = getAuditControlData();
-
-  // Generate synthetic submissions - use mockSubmissions directly
-  const generateSyntheticSubmissions = useCallback((): SubmissionData[] => {
-    console.log("Using mock submissions data");
-    return mockSubmissions;
-  }, []);
-
-  // Load dashboard data only once on mount or when mode changes
+  const [loadingReports, setLoadingReports] = useState<boolean>(false);
+  const [showDemoNotice, setShowDemoNotice] = useState<boolean>(true); 
+  
+  // Count statuses for metrics display
+  const compliantCount = submissions.filter(s => s.status === 'Compliant').length;
+  const atRiskCount = submissions.filter(s => s.status === 'At Risk' || s.status === 'Requires Attention').length;
+  const nonCompliantCount = submissions.filter(s => s.status === 'Non-Compliant').length;
+  
+  // Calculate completion percentage
+  const submissionsCount = submissions.length;
+  const compliantPercentage = Math.round((compliantCount / submissionsCount) * 100) || 0;
+  
+  // Sync rule engine to current mode
   useEffect(() => {
-    const loadDashboardData = async () => {
-      // If we're already loading, skip
-      if (loading || submissionsLoading) {
-        return;
-      }
-
-      // If we already have data and mode hasn't changed, skip
-      if (initialized && submissions.length > 0) {
-        return;
-      }
-
-      console.log("Loading dashboard data, isDemoMode:", isDemoMode);
-      setLoading(true);
-      setError(null);
-      
-      try {
-        if (isDemoMode) {
-          // For demo mode, use our default dashboard data
-          setDashboardData(defaultDashboardData);
-          
-          // Generate synthetic submissions only if we don't already have them
-          if (submissions.length === 0) {
-            const syntheticData = generateSyntheticSubmissions();
-            dispatch(fetchSubmissionsSuccess(syntheticData));
-          }
-        } else {
-          // For live mode, attempt to fetch real data
-          try {
-            dispatch(fetchSubmissionsStart());
-            
-            // Try to get real reports data
-            const reports = await apiService.getReports();
-            if (reports) {
-              // Ensure reports has the required submissionTrends structure
-              const sanitizedReports = {
-                ...defaultDashboardData,
-                ...reports
-              };
-              setDashboardData(sanitizedReports);
-            }
-            
-            // Try to get real submissions data
-            const submissionsData = await apiService.getSubmissions();
-            if (submissionsData && submissionsData.length > 0) {
-              dispatch(fetchSubmissionsSuccess(submissionsData));
-            } else {
-              throw new Error('No submissions data returned');
-            }
-          } catch (apiError) {
-            console.error('API Error:', apiError);
-            // Fall back to demo data if API fails
-            setDashboardData(defaultDashboardData);
-            const syntheticData = generateSyntheticSubmissions();
-            dispatch(fetchSubmissionsSuccess(syntheticData));
-          }
-        }
-        
-        setInitialized(true);
-      } catch (err) {
-        console.error('Error loading dashboard data:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
-        setError(errorMessage);
-        dispatch(fetchSubmissionsFailure(errorMessage));
-        
-        // Even in error case, try to show demo data
-        setDashboardData(defaultDashboardData);
-        if (submissions.length === 0) {
-          const syntheticData = generateSyntheticSubmissions();
-          dispatch(fetchSubmissionsSuccess(syntheticData));
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDashboardData();
-  }, [
-    dispatch, 
-    isDemoMode, 
-    loading, 
-    submissionsLoading, 
-    initialized, 
-    submissions.length, 
-    generateSyntheticSubmissions
-  ]);
-
-  // Handler for metric card clicks to navigate to filtered submissions
-  const handleMetricClick = (status: string) => {
-    if (status === 'all') {
-      navigate('/submissions');
-    } else {
-      navigate(`/submissions?status=${status}`);
-    }
-  };
-
-  // Handler for "View all alerts" click
-  const handleViewAllAlertsClick = () => {
-    navigate('/alerts');
-  };
-
-  // FIXED: Handler for Rule Engine Demo button - ensure rule engine provider knows current mode
-  const handleRuleEngineDemoClick = () => {
-    // Ensure the rule engine provider maintains the current mode
     if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
       ruleEngineProvider.setDemoMode(isDemoMode);
-      console.log(`Rule engine mode explicitly set before navigation: ${isDemoMode ? 'DEMO' : 'LIVE'}`);
     }
+  }, [isDemoMode]);
+
+  // Load submissions and reports on component mount
+  useEffect(() => {
+    // Initial load
+    const loadDataAndReports = async () => {
+      if (submissions.length === 0 || loading) {
+        // Load submissions
+        dispatch(fetchSubmissionsStart());
+        try {
+          const data = await apiService.getSubmissions();
+          dispatch(fetchSubmissionsSuccess(data));
+        } catch (err) {
+          console.error('Error loading submissions:', err);
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load submissions';
+          dispatch(fetchSubmissionsFailure(errorMessage));
+        }
+      }
+    };
     
-    // Small delay to ensure the mode is properly set
-    setTimeout(() => {
-      navigate('/alerts?tab=rule-engine');
-    }, 5);
+    loadDataAndReports();
+  }, [dispatch, isDemoMode, submissions.length, loading]);
+
+  // Handle card click to navigate
+  const handleCardClick = (path: string) => {
+    navigate(path);
+  };
+
+  // Handle row click to navigate to submission detail
+  const handleRowClick = (submissionId: string) => {
+    navigate(`/submissions/${submissionId}`);
   };
 
   // Format date for display
@@ -289,7 +192,9 @@ const Dashboard: React.FC = () => {
   };
 
   // Get status chip based on status text
-  const getStatusChip = (status: string) => {
+  const getStatusChip = (status: string | undefined) => {
+    if (!status) return <Chip label="Unknown" color="default" size="small" />;
+    
     const statusLower = status.toLowerCase();
     if (statusLower === 'compliant') {
       return <Chip label={status} color="success" size="small" />;
@@ -300,34 +205,39 @@ const Dashboard: React.FC = () => {
     }
     return <Chip label={status} color="default" size="small" />;
   };
-
-  // Get active submissions for displaying in the dashboard
-  const getActiveSubmissions = useCallback(() => {
-    return submissions.length > 0 ? submissions : mockSubmissions;
-  }, [submissions]);
-
-  const activeSubmissions = getActiveSubmissions();
+  
+  // Get the 5 most recent submissions for the dashboard
+  const recentSubmissions = [...submissions]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5);
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+    <Box my={4}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Insurance Monitoring Dashboard
+          Dashboard
+          {isDemoMode && <Chip label="Demo Mode" size="small" color="default" sx={{ ml: 2 }} />}
         </Typography>
-        <Button 
-          variant="contained"
-          color="primary"
-          startIcon={<SettingsIcon />}
-          onClick={handleRuleEngineDemoClick}
-        >
-          Rule Engine Demo
-        </Button>
+        <Box>
+          <FormControlLabel
+            control={
+              <Switch 
+                checked={showDemoNotice} 
+                onChange={(e) => setShowDemoNotice(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Show Alerts"
+          />
+        </Box>
       </Box>
       
-      {(loading || submissionsLoading) && (
-        <Box display="flex" justifyContent="center" my={4}>
-          <CircularProgress />
-        </Box>
+      {showDemoNotice && isDemoMode && (
+        <Alert severity="info" sx={{ mb: 3 }} onClose={() => setShowDemoNotice(false)}>
+          <Typography variant="body2">
+            This dashboard is running in <strong>Demo Mode</strong> with synthetic data. Toggle to Live Mode in Settings to connect to real APIs.
+          </Typography>
+        </Alert>
       )}
       
       {error && (
@@ -336,136 +246,134 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
       
-      {!loading && !submissionsLoading && (
-        <>
-          {/* Metrics Overview */}
-          <Grid container spacing={3} mb={4}>
-            <Grid item xs={12} md={3}>
-              <MetricCard bgcolor="#4dabf5" onClick={() => handleMetricClick('all')}>
-                <CardContent>
-                  <Typography variant="overline">Submissions</Typography>
-                  <Typography variant="h3">{totalSubmissions}</Typography>
-                  <Typography variant="body2">Active submissions</Typography>
-                </CardContent>
-              </MetricCard>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <MetricCard bgcolor="#66bb6a" onClick={() => handleMetricClick('Compliant')}>
-                <CardContent>
-                  <Typography variant="overline">Compliant</Typography>
-                  <Typography variant="h3">{compliantSubmissions}</Typography>
-                  <Typography variant="body2">Ready for underwriting</Typography>
-                </CardContent>
-              </MetricCard>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <MetricCard bgcolor="#ff9800" onClick={() => handleMetricClick('At Risk')}>
-                <CardContent>
-                  <Typography variant="overline">At Risk</Typography>
-                  <Typography variant="h3">{atRiskSubmissions}</Typography>
-                  <Typography variant="body2">Need attention</Typography>
-                </CardContent>
-              </MetricCard>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <MetricCard bgcolor="#f44336" onClick={() => handleMetricClick('Non-Compliant')}>
-                <CardContent>
-                  <Typography variant="overline">Non-Compliant</Typography>
-                  <Typography variant="h3">{nonCompliantSubmissions}</Typography>
-                  <Typography variant="body2">Blocked from proceeding</Typography>
-                </CardContent>
-              </MetricCard>
-            </Grid>
-          </Grid>
-          
-          {/* Charts Row */}
-          <Grid container spacing={3} mb={4}>
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="h5" gutterBottom>
-                  Audit Control Status
-                </Typography>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={auditControlData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={true}
-                      label={renderCustomizedLabel}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {auditControlData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Paper>
-            </Grid>
-            
-            <Grid item xs={12} md={6}>
-              {/* Audit Alerts section */}
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="h5" gutterBottom>
-                  Audit Alerts
-                </Typography>
-                
-                <Box sx={{ my: 2 }}>
-                  {auditAlerts.map((alert, index) => (
-                    <Card 
-                      key={index} 
-                      sx={{ 
-                        mb: 2, 
-                        bgcolor: alert.color,
-                        '&:last-child': { mb: 0 }
-                      }}
-                    >
-                      <CardContent sx={{ py: 2 }}>
-                        <Typography variant="h6" gutterBottom>
-                          {alert.title}
-                        </Typography>
-                        <Typography variant="body1">
-                          {alert.description}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  ))}
+      {/* First row - Key metrics */}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ height: '100%', cursor: 'pointer' }} onClick={() => handleCardClick('/submissions')}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Total Submissions</Typography>
+                  <Typography variant="h4">{submissionsCount}</Typography>
                 </Box>
-                
-                <Box 
-                  sx={{ 
-                    p: 2, 
-                    bgcolor: '#e3f2fd', 
-                    borderRadius: 1, 
-                    textAlign: 'center',
-                    cursor: 'pointer'
-                  }}
-                  onClick={handleViewAllAlertsClick}
-                >
-                  <Typography variant="body1" color="primary">
-                    View all 8 alerts...
-                  </Typography>
+                <Box sx={{ backgroundColor: 'primary.light', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 1 }}>
+                  <DocumentIcon sx={{ color: 'primary.contrastText' }} />
                 </Box>
-              </Paper>
-            </Grid>
-          </Grid>
-          
-          {/* Recent Submissions Table */}
-          <Paper sx={{ p: 2, mb: 4 }}>
-            <Typography variant="h5" gutterBottom>
-              Recent Submissions
-            </Typography>
+              </Box>
+              <Box mt={2} display="flex" alignItems="center">
+                <TrendingUpIcon color="success" sx={{ mr: 0.5 }} fontSize="small" />
+                <Typography variant="body2">
+                  3 new in the last 24 hours
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ height: '100%', cursor: 'pointer' }} onClick={() => handleCardClick('/submissions?status=Compliant')}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Compliant</Typography>
+                  <Typography variant="h4">{compliantCount}</Typography>
+                </Box>
+                <Box sx={{ backgroundColor: 'success.light', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 1 }}>
+                  <CheckIcon sx={{ color: 'success.contrastText' }} />
+                </Box>
+              </Box>
+              <Box mt={2} display="flex" alignItems="center">
+                <Typography variant="body2">
+                  {compliantPercentage}% of total submissions
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={compliantPercentage} 
+                color="success"
+                sx={{ mt: 1, height: 8, borderRadius: 1 }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ height: '100%', cursor: 'pointer' }} onClick={() => handleCardClick('/submissions?status=At Risk')}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Requires Attention</Typography>
+                  <Typography variant="h4">{atRiskCount}</Typography>
+                </Box>
+                <Box sx={{ backgroundColor: 'warning.light', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 1 }}>
+                  <WarningIcon sx={{ color: 'warning.contrastText' }} />
+                </Box>
+              </Box>
+              <Box mt={2} display="flex" alignItems="center">
+                <Typography variant="body2">
+                  Need review for compliance issues
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={(atRiskCount / submissionsCount) * 100 || 0} 
+                color="warning"
+                sx={{ mt: 1, height: 8, borderRadius: 1 }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ height: '100%', cursor: 'pointer' }} onClick={() => handleCardClick('/submissions?status=Non-Compliant')}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Non-Compliant</Typography>
+                  <Typography variant="h4">{nonCompliantCount}</Typography>
+                </Box>
+                <Box sx={{ backgroundColor: 'error.light', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 1 }}>
+                  <ErrorIcon sx={{ color: 'error.contrastText' }} />
+                </Box>
+              </Box>
+              <Box mt={2} display="flex" alignItems="center">
+                <Typography variant="body2">
+                  Critical compliance violations
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={(nonCompliantCount / submissionsCount) * 100 || 0} 
+                color="error"
+                sx={{ mt: 1, height: 8, borderRadius: 1 }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      
+      {/* Second row - Recent submissions and alerts */}
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <Paper sx={{ p: 3 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h6">Recent Submissions</Typography>
+              <Button 
+                variant="text" 
+                color="primary"
+                onClick={() => handleCardClick('/submissions')}
+              >
+                View All
+              </Button>
+            </Box>
             
-            {activeSubmissions.length > 0 ? (
+            {loading ? (
+              <Box display="flex" justifyContent="center" my={4}>
+                <CircularProgress />
+              </Box>
+            ) : recentSubmissions.length > 0 ? (
               <TableContainer>
-                <Table>
+                <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>Submission ID</TableCell>
@@ -476,16 +384,16 @@ const Dashboard: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {activeSubmissions.slice(0, 5).map((submission) => (
+                    {recentSubmissions.map((submission) => (
                       <TableRow 
                         key={submission.submissionId}
                         hover
-                        onClick={() => navigate(`/submissions/${submission.submissionId}`)}
+                        onClick={() => handleRowClick(submission.submissionId)}
                         sx={{ cursor: 'pointer' }}
                       >
                         <TableCell>{submission.submissionId}</TableCell>
-                        <TableCell>{submission.insured.name}</TableCell>
-                        <TableCell>{submission.insured.industry.description}</TableCell>
+                        <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
+                        <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
                         <TableCell>{formatDate(submission.timestamp)}</TableCell>
                         <TableCell>{getStatusChip(submission.status)}</TableCell>
                       </TableRow>
@@ -495,24 +403,19 @@ const Dashboard: React.FC = () => {
               </TableContainer>
             ) : (
               <Box p={2} textAlign="center">
-                <Typography variant="body1">No submissions available</Typography>
-              </Box>
-            )}
-            
-            {activeSubmissions.length > 5 && (
-              <Box display="flex" justifyContent="flex-end" mt={2}>
-                <Typography 
-                  color="primary" 
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => navigate('/submissions')}
-                >
-                  View all submissions
+                <Typography variant="body2" color="text.secondary">
+                  No submissions available
                 </Typography>
               </Box>
             )}
           </Paper>
-        </>
-      )}
+        </Grid>
+        
+        <Grid item xs={12} md={4}>
+          {/* Audit Alerts Panel - Updated to match the image */}
+          <AuditAlerts submissions={submissions} />
+        </Grid>
+      </Grid>
     </Box>
   );
 };

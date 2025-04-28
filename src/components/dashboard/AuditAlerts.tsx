@@ -1,165 +1,194 @@
 // src/components/dashboard/AuditAlerts.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
   Paper,
-  Card,
-  CardContent,
-  styled,
-  Chip
+  Stack
 } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
+import { Submission, SubmissionDetail, Document, Industry } from '../../types';
 
-// Define styled components for alert cards
-const AlertCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
-  marginBottom: '16px',
-  backgroundColor: bgcolor,
-  '&:last-child': {
-    marginBottom: 0
-  }
-}));
-
-// Alert data interface
-interface AlertItem {
+// Interface for audit alert
+interface AuditAlert {
+  id: string;
   title: string;
   description: string;
-  color: string;
-  isLive?: boolean;
+  count: number;
+  severity: 'warning' | 'error' | 'info';
+  filter: (submission: Submission | SubmissionDetail) => boolean;
 }
 
-// Props for the AuditAlerts component
-interface AuditAlertsProps {
-  alerts: AlertItem[];
-  totalAlerts: number;
-  onViewAllClick?: () => void;
-}
-
-const AuditAlerts: React.FC<AuditAlertsProps> = ({ 
-  alerts: initialAlerts, 
-  totalAlerts, 
-  onViewAllClick 
-}) => {
+const AuditAlerts: React.FC = () => {
+  const navigate = useNavigate();
   const { submissions } = useSelector((state: RootState) => state.submissions);
-  const { isDemoMode } = useSelector((state: RootState) => state.config);
-  const [alerts, setAlerts] = useState<AlertItem[]>(initialAlerts);
+  const [alerts, setAlerts] = useState<AuditAlert[]>([]);
   
-  // Count submissions by status to update alerts dynamically
+  // Define alerts with filters
+  const defineAlerts = useCallback(() => {
+    const alertDefinitions: AuditAlert[] = [
+      {
+        id: 'missing-financial',
+        title: 'Missing Financial Documents',
+        description: 'submissions need financial statements',
+        severity: 'warning',
+        count: 0,
+        filter: (sub) => {
+          // Check if financial statements are missing
+          // Use type guard to check if this is a SubmissionDetail with documents
+          const hasDocuments = 'documents' in sub && Array.isArray(sub.documents);
+          
+          if (!hasDocuments) {
+            // If it doesn't have documents property, assume it's missing financials
+            return true;
+          }
+          
+          // Now TypeScript knows sub.documents exists and is an array
+          return !(sub.documents?.some((doc: Document) => 
+            doc.type?.toLowerCase().includes('financial') || 
+            doc.name?.toLowerCase().includes('financial')
+          ) ?? false);
+        }
+      },
+      {
+        id: 'prohibited-class',
+        title: 'Outside Risk Appetite',
+        description: 'submissions in prohibited classes',
+        severity: 'error',
+        count: 0,
+        filter: (sub) => {
+          // Check for prohibited industry codes
+          const prohibitedCodes = ['6531', '7371', '3579']; 
+          const industryCode = (sub.insured?.industry as Industry)?.code || '';
+          return prohibitedCodes.includes(industryCode);
+        }
+      },
+      // Additional alerts could be added here
+    ];
+    
+    return alertDefinitions;
+  }, []);
+  
+  // Process submissions to count alerts
   useEffect(() => {
-    if (!submissions || submissions.length === 0) return;
-    
-    // FIXED: Store and preserve the isDemoMode setting
-    console.log("AuditAlerts - Current mode:", isDemoMode ? "DEMO" : "LIVE");
-    
-    // Get current restricted NAICS codes - use empty array if the method doesn't exist
-    const restrictedNaicsCodes = ruleEngineProvider.getRestrictedNaicsCodes?.() || [];
-    const isNaicsRuleActive = ruleEngineProvider.isNaicsRuleEnabled?.() !== false;
-    
-    console.log("Restricted NAICS codes:", restrictedNaicsCodes);
-    console.log("NAICS rule active:", isNaicsRuleActive);
-    
-    // Count submissions with restricted NAICS codes
-    const restrictedNaicsCount = isNaicsRuleActive ? submissions.filter(sub => {
-      const industryCode = sub.insured?.industry?.code || '';
-      return restrictedNaicsCodes.includes(industryCode);
-    }).length : 0;
-    
-    console.log("Submissions with restricted NAICS:", restrictedNaicsCount);
-    
-    // Create updated alerts array
-    const updatedAlerts: AlertItem[] = [...initialAlerts];
-    
-    // Find and update the "Missing Financial Documents" alert if it exists
-    const missingFinancialIndex = updatedAlerts.findIndex(alert => 
-      alert.title === "Missing Financial Documents"
-    );
-    
-    if (missingFinancialIndex >= 0) {
-      updatedAlerts[missingFinancialIndex] = {
-        ...updatedAlerts[missingFinancialIndex],
-        isLive: false
-      };
-    }
-    
-    // Find and update the "Outside Risk Appetite" alert if it exists
-    const riskAppetiteIndex = updatedAlerts.findIndex(alert => 
-      alert.title === "Outside Risk Appetite"
-    );
-    
-    if (riskAppetiteIndex >= 0 && restrictedNaicsCount > 0) {
-      updatedAlerts[riskAppetiteIndex] = {
-        ...updatedAlerts[riskAppetiteIndex],
-        description: `${restrictedNaicsCount} submissions in prohibited classes`,
-        isLive: true
-      };
-    } else if (riskAppetiteIndex >= 0) {
-      updatedAlerts[riskAppetiteIndex] = {
-        ...updatedAlerts[riskAppetiteIndex],
-        isLive: false
-      };
-    } else if (restrictedNaicsCount > 0) {
-      // If it doesn't exist, add it
-      updatedAlerts.push({
-        title: "Outside Risk Appetite",
-        description: `${restrictedNaicsCount} submissions in prohibited classes`,
-        color: "#ffebee", // Light red background
-        isLive: true
+    const processAlerts = () => {
+      const alertDefs = defineAlerts();
+      
+      // Count submissions matching each alert filter
+      const processedAlerts = alertDefs.map(alert => {
+        const matchingSubmissions = submissions.filter(alert.filter);
+        return {
+          ...alert,
+          count: matchingSubmissions.length
+        };
       });
-    }
+      
+      // Only show alerts with matches
+      const activeAlerts = processedAlerts.filter(alert => alert.count > 0);
+      setAlerts(activeAlerts);
+    };
     
-    setAlerts(updatedAlerts);
-  }, [submissions, initialAlerts, isDemoMode]);
-
+    if (submissions.length > 0) {
+      processAlerts();
+    }
+  }, [submissions, defineAlerts]);
+  
+  // Handle click on an alert
+  const handleAlertClick = (alertId: string) => {
+    // Navigate to submissions page with appropriate filter
+    if (alertId === 'missing-financial') {
+      navigate('/submissions?filter=missing-financials');
+    } else if (alertId === 'prohibited-class') {
+      navigate('/submissions?filter=prohibited-class');
+    } else {
+      navigate('/submissions');
+    }
+  };
+  
+  // Handle "View all" click
+  const handleViewAll = () => {
+    navigate('/alerts');
+  };
+  
+  // Get background color based on severity
+  const getBackgroundColor = (severity: string) => {
+    switch (severity) {
+      case 'error':
+        return '#FEECF0'; // Light red
+      case 'warning':
+        return '#FEF6E6'; // Light orange/beige
+      case 'info':
+        return '#E6F7FF'; // Light blue
+      default:
+        return '#F5F5F5'; // Light gray
+    }
+  };
+  
   return (
-    <Paper sx={{ p: 2, height: '100%' }}>
-      <Typography variant="h5" gutterBottom>
-        Audit Alerts {isDemoMode && "(Demo Mode)"}
+    <Box>
+      <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 500, mb: 3 }}>
+        Audit Alerts
       </Typography>
       
-      <Box sx={{ my: 2 }}>
-        {alerts.map((alert, index) => (
-          <AlertCard key={index} bgcolor={alert.color}>
-            <CardContent sx={{ py: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Typography variant="h6" gutterBottom>
-                  {alert.title}
-                  {alert.isLive && (
-                    <Chip 
-                      label="Live" 
-                      color="error" 
-                      size="small" 
-                      sx={{ ml: 1, fontSize: '0.7rem' }} 
-                    />
-                  )}
-                </Typography>
-              </Box>
-              <Typography variant="body1">
-                {alert.description}
-              </Typography>
-            </CardContent>
-          </AlertCard>
+      <Stack spacing={2}>
+        {alerts.map((alert) => (
+          <Paper 
+            key={alert.id}
+            sx={{ 
+              p: 3, 
+              backgroundColor: getBackgroundColor(alert.severity),
+              borderRadius: 1,
+              cursor: 'pointer',
+              '&:hover': {
+                boxShadow: 2
+              }
+            }}
+            onClick={() => handleAlertClick(alert.id)}
+          >
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 500, mb: 1 }}>
+              {alert.title}
+            </Typography>
+            <Typography variant="body1">
+              {alert.count} {alert.description}
+            </Typography>
+          </Paper>
         ))}
-      </Box>
-      
-      {totalAlerts > alerts.length && (
-        <Box 
-          sx={{ 
-            p: 2, 
-            bgcolor: '#e3f2fd', 
-            borderRadius: 1, 
-            textAlign: 'center',
-            cursor: 'pointer'
-          }}
-          onClick={onViewAllClick}
-        >
-          <Typography variant="body1" color="primary">
-            View all {totalAlerts} alerts...
-          </Typography>
-        </Box>
-      )}
-    </Paper>
+        
+        {alerts.length > 0 && (
+          <Paper
+            sx={{
+              p: 3,
+              backgroundColor: '#E6F4FF', // Light blue
+              borderRadius: 1,
+              textAlign: 'center',
+              cursor: 'pointer',
+              '&:hover': {
+                boxShadow: 2
+              }
+            }}
+            onClick={handleViewAll}
+          >
+            <Typography 
+              variant="body1" 
+              color="primary"
+              sx={{ fontWeight: 500 }}
+            >
+              View all {alerts.length + 5} alerts...
+            </Typography>
+          </Paper>
+        )}
+        
+        {alerts.length === 0 && (
+          <Paper sx={{ p: 3, backgroundColor: '#F5F5F5' }}>
+            <Typography variant="body1" align="center">
+              No active alerts
+            </Typography>
+          </Paper>
+        )}
+      </Stack>
+    </Box>
   );
 };
 

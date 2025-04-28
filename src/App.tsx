@@ -16,7 +16,8 @@ import SubmissionList from './components/submissions/SubmissionList';
 import SubmissionDetail from './components/submissions/SubmissionDetail';
 import Settings from './components/settings/Settings';
 import ConfigurationUtility from './components/config/ConfigurationUtility';
-import Alerts from './components/alerts/Alerts'; // Use Alerts component instead of non-existent components
+import Alerts from './components/alerts/Alerts';
+import RuleEngineDemo from './services/rules/RuleEngineDemo'; // Import RuleEngineDemo component
 
 // Configure API service on startup
 import apiService from './services/api/apiService';
@@ -26,7 +27,7 @@ import ruleEngineProvider from './services/rules/ruleEngineProvider';
 
 // AppContent component to access redux state
 const AppContent: React.FC = () => {
-  const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
+  const { isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl } = useSelector((state: RootState) => state.config);
   
   // Configure API service based on redux state
   React.useEffect(() => {
@@ -34,12 +35,18 @@ const AppContent: React.FC = () => {
     apiService.setDemoMode(isDemoMode);
     apiService.setApiEndpoint(apiEndpoint);
     
-    // FIXED: Ensure rule engine provider is also configured
+    // Configure rule engine provider
     if (ruleEngineProvider.setDemoMode) {
       console.log(`Configuring rule engine provider - Demo Mode: ${isDemoMode ? 'ON' : 'OFF'}`);
       ruleEngineProvider.setDemoMode(isDemoMode);
     }
-  }, [isDemoMode, apiEndpoint]);
+    
+    // Configure rule engine provider with remote settings
+    if (ruleEngineProvider.configure) {
+      console.log(`Configuring rule engine provider with remote settings - Remote: ${useRemoteRuleEngine ? 'ON' : 'OFF'}, API URL: ${ruleEngineApiUrl}`);
+      ruleEngineProvider.configure(useRemoteRuleEngine, ruleEngineApiUrl);
+    }
+  }, [isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl]);
   
   return (
     <Layout>
@@ -49,8 +56,8 @@ const AppContent: React.FC = () => {
         <Route path="/submissions/:id" element={<SubmissionDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/config" element={<ConfigurationUtility />} />
-        {/* Use Alerts component for both alerts and rule engine demo */}
         <Route path="/alerts" element={<Alerts />} />
+        <Route path="/rule-engine" element={<RuleEngineDemo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

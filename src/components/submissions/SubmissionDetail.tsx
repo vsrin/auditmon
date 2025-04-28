@@ -1,5 +1,5 @@
 // src/components/submissions/SubmissionDetail.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -88,13 +88,16 @@ const SubmissionDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { selectedSubmission, loading, error } = useSelector((state: RootState) => state.submissions);
+  const { selectedSubmission, loading, error, requestedSubmissionId } = useSelector((state: RootState) => state.submissions);
   const { isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl } = useSelector((state: RootState) => state.config);
   const [tabValue, setTabValue] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [notFoundError, setNotFoundError] = useState<boolean>(false);
+  
+  // Use a ref to track the previous ID for change detection
+  const prevIdRef = useRef<string | null>(null);
 
-  // FIXED: Ensure rule engine provider is synced with current mode
+  // Ensure rule engine provider is synced with current mode
   useEffect(() => {
     if (ruleEngineProvider.setDemoMode) {
       console.log("SubmissionDetail - syncing rule engine demo mode:", isDemoMode);
@@ -115,7 +118,16 @@ const SubmissionDetail: React.FC = () => {
     ruleEngineProvider.configure(useRemoteRuleEngine, ruleEngineApiUrl);
   }, [isDemoMode, apiEndpoint, useRemoteRuleEngine, ruleEngineApiUrl]);
 
-  // Load submission detail
+  // Clean up when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log("Unmounting SubmissionDetail - clearing selected submission");
+      dispatch(clearSelectedSubmission());
+      prevIdRef.current = null;
+    };
+  }, [dispatch]);
+
+  // Load submission detail - FIX: Completely revise this logic
   useEffect(() => {
     if (!id) {
       console.error("Missing submission ID parameter");
@@ -123,118 +135,148 @@ const SubmissionDetail: React.FC = () => {
       return;
     }
     
-    console.log("Loading submission detail for ID:", id);
-    console.log("Using Demo Mode:", isDemoMode);
-    console.log("Using Remote Rule Engine:", useRemoteRuleEngine);
-
-    const loadSubmissionDetail = async () => {
-      dispatch(fetchSubmissionDetailStart());
-      setNotFoundError(false);
+    // Check if the ID has changed or if we need to force a reload
+    const idChanged = prevIdRef.current !== id;
+    const needsReload = idChanged || 
+                       !selectedSubmission || 
+                       selectedSubmission.submissionId !== id ||
+                       requestedSubmissionId !== id;
+    
+    if (needsReload) {
+      console.log(`Loading data for submission ID: ${id} (changed: ${idChanged}, current cache: ${selectedSubmission?.submissionId || 'none'})`);
+      prevIdRef.current = id;
       
-      try {
-        // FIXED: Use explicit ID parameter for loading submission to avoid context loss
-        if (isDemoMode) {
-          // In demo mode, use the mock data source
-          console.log("Fetching mock submission data for ID:", id);
-          const mockData = getMockSubmissionDetail(id);
-          
-          if (mockData) {
-            console.log("Mock submission data found:", mockData);
-            dispatch(fetchSubmissionDetailSuccess(mockData));
+      // Always clear existing submission when loading a new one
+      if (selectedSubmission && selectedSubmission.submissionId !== id) {
+        console.log(`Clearing selected submission - cached ID ${selectedSubmission.submissionId} doesn't match requested ID ${id}`);
+        dispatch(clearSelectedSubmission());
+      }
+      
+      const loadSubmissionDetail = async () => {
+        // Start loading and track the requested ID
+        dispatch(fetchSubmissionDetailStart(id));
+        setNotFoundError(false);
+        
+        try {
+          if (isDemoMode) {
+            // In demo mode, use the mock data source
+            console.log("Fetching mock submission data for ID:", id);
+            const mockData = getMockSubmissionDetail(id);
             
-            // Set first document as selected if available
-            if (mockData.documents && mockData.documents.length > 0) {
-              setSelectedDocument(mockData.documents[0].id);
+            if (mockData) {
+              // CRITICAL FIX: Force the ID to match the requested ID
+              if (mockData.submissionId !== id) {
+                console.log(`Fixing mock data ID mismatch: requested=${id}, received=${mockData.submissionId}`);
+                mockData.submissionId = id;
+              }
+              
+              console.log("Mock submission data found:", mockData);
+              dispatch(fetchSubmissionDetailSuccess(mockData));
+              
+              // Set first document as selected if available
+              if (mockData.documents && mockData.documents.length > 0) {
+                setSelectedDocument(mockData.documents[0].id);
+              }
+            } else {
+              console.error(`Submission with ID ${id} not found in mock data`);
+              setNotFoundError(true);
+              dispatch(fetchSubmissionDetailFailure(`Submission with ID ${id} not found`));
             }
           } else {
-            console.error(`Submission with ID ${id} not found in mock data`);
+            // In live mode, call the API directly with the ID parameter
+            console.log("Fetching submission data from API for ID:", id);
+            let data = await apiService.getSubmissionDetail(id);
+            console.log("Submission data received:", data);
+            
+            // If no data returned or empty object, show not found error
+            if (!data || Object.keys(data).length === 0) {
+              console.error(`Submission with ID ${id} not found in API`);
+              setNotFoundError(true);
+              dispatch(fetchSubmissionDetailFailure(`Submission with ID ${id} not found`));
+              return;
+            }
+            
+            // CRITICAL FIX: Ensure the submissionId from URL is explicitly used
+            if (!data.submissionId) {
+              console.log(`API returned data without submissionId, setting to: ${id}`);
+              data.submissionId = id;
+            } else if (data.submissionId !== id) {
+              console.warn(`API returned submission with ID ${data.submissionId} but we requested ${id}`);
+              data.submissionId = id; // Force the correct ID
+            }
+            
+            // Process live mode data
+            console.log("Processing live mode data for ID:", id);
+            
+            // For live mode, ensure we have proper compliance checks
+            // Initialize empty array if not present
+            if (!data.complianceChecks) {
+              data.complianceChecks = [];
+            }
+            
+            // Type assertion to ensure it's in our format
+            const typedData = data as SubmissionDetailType;
+              
+            // Call rule engine to evaluate submission
+            try {
+              console.log("Evaluating submission with rule engine for ID:", id);
+              const evaluationResult = await ruleEngineProvider.evaluateSubmission(typedData);
+              
+              console.log("Rule engine evaluation result for ID:", id, evaluationResult);
+              
+              // Add compliance checks to the submission data
+              typedData.complianceChecks = evaluationResult.checks || [];
+              typedData.status = evaluationResult.overallStatus || typedData.status;
+              
+              console.log("Updated submission with checks:", 
+                `ID: ${id}`,
+                `Count: ${typedData.complianceChecks.length}`, 
+                `Status: ${typedData.status}`);
+            } catch (ruleError) {
+              console.error("Error evaluating submission with rule engine:", ruleError);
+              console.error("Error stack:", ruleError instanceof Error ? ruleError.stack : "No stack trace");
+              // If rule evaluation fails, keep empty compliance checks
+            }
+            
+            // CRITICAL FIX: One final check to make sure the ID is correct before saving to state
+            if (typedData.submissionId !== id) {
+              console.warn("Final ID check failed, forcing correct ID");
+              typedData.submissionId = id;
+            }
+            
+            dispatch(fetchSubmissionDetailSuccess(typedData));
+            
+            // Set first document as selected if available
+            if (typedData.documents && typedData.documents.length > 0) {
+              setSelectedDocument(typedData.documents[0].id);
+            }
+          }
+        } catch (err) {
+          console.error("Error loading submission detail:", err);
+          const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+          
+          // Check if the error indicates the submission wasn't found
+          if (errorMessage.includes('not found') || errorMessage.includes('404')) {
             setNotFoundError(true);
-            dispatch(fetchSubmissionDetailFailure(`Submission with ID ${id} not found`));
-          }
-        } else {
-          // In live mode, call the API directly with the ID parameter
-          console.log("Fetching submission data from API for ID:", id);
-          let data = await apiService.getSubmissionDetail(id);
-          console.log("Submission data received:", data);
-          
-          // If no data returned or empty object, show not found error
-          if (!data || Object.keys(data).length === 0) {
-            console.error(`Submission with ID ${id} not found in API`);
-            setNotFoundError(true);
-            dispatch(fetchSubmissionDetailFailure(`Submission with ID ${id} not found`));
-            return;
           }
           
-          // FIXED: Ensure the submissionId from URL is explicitly used
-          if (!data.submissionId) {
-            data.submissionId = id;
-          } else if (data.submissionId !== id) {
-            console.warn(`API returned submission with ID ${data.submissionId} but we requested ${id}`);
-            data.submissionId = id; // Force the correct ID
-          }
-          
-          // Process live mode data
-          console.log("Processing live mode data for ID:", id);
-          
-          // For live mode, ensure we have proper compliance checks
-          // Initialize empty array if not present
-          if (!data.complianceChecks) {
-            data.complianceChecks = [];
-          }
-          
-          // Type assertion to ensure it's in our format
-          const typedData = data as SubmissionDetailType;
-            
-          // Call rule engine to evaluate submission
-          try {
-            console.log("Evaluating submission with rule engine for ID:", id);
-            const evaluationResult = await ruleEngineProvider.evaluateSubmission(typedData);
-            
-            console.log("Rule engine evaluation result for ID:", id, evaluationResult);
-            
-            // Add compliance checks to the submission data
-            typedData.complianceChecks = evaluationResult.checks || [];
-            typedData.status = evaluationResult.overallStatus || typedData.status;
-            
-            console.log("Updated submission with checks:", 
-              `ID: ${id}`,
-              `Count: ${typedData.complianceChecks.length}`, 
-              `Status: ${typedData.status}`);
-          } catch (ruleError) {
-            console.error("Error evaluating submission with rule engine:", ruleError);
-            console.error("Error stack:", ruleError instanceof Error ? ruleError.stack : "No stack trace");
-            // If rule evaluation fails, keep empty compliance checks
-          }
-          
-          dispatch(fetchSubmissionDetailSuccess(typedData));
-          
-          // Set first document as selected if available
-          if (typedData.documents && typedData.documents.length > 0) {
-            setSelectedDocument(typedData.documents[0].id);
-          }
+          dispatch(fetchSubmissionDetailFailure(errorMessage));
         }
-      } catch (err) {
-        console.error("Error loading submission detail:", err);
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-        
-        // Check if the error indicates the submission wasn't found
-        if (errorMessage.includes('not found') || errorMessage.includes('404')) {
-          setNotFoundError(true);
-        }
-        
-        dispatch(fetchSubmissionDetailFailure(errorMessage));
+      };
+
+      loadSubmissionDetail();
+    } else {
+      console.log(`Using cached data for submission ID: ${id}`);
+      
+      // Even with cached data, verify the submission ID matches
+      if (selectedSubmission && selectedSubmission.submissionId !== id) {
+        console.warn(`Cached submission ID mismatch: ${selectedSubmission.submissionId} !== ${id}`);
+        dispatch(clearSelectedSubmission());
+        // Force reload by clearing the previous ID reference
+        prevIdRef.current = null;
       }
-    };
-
-    // FIXED: Always load submission detail when component mounts or ID changes
-    loadSubmissionDetail();
-
-    // Clean up when component unmounts
-    return () => {
-      console.log("Cleaning up - clearing selected submission");
-      dispatch(clearSelectedSubmission());
-    };
-  }, [dispatch, id, isDemoMode, useRemoteRuleEngine, navigate, apiEndpoint]);
+    }
+  }, [dispatch, id, isDemoMode, useRemoteRuleEngine, navigate, apiEndpoint, selectedSubmission, requestedSubmissionId]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -306,6 +348,9 @@ const SubmissionDetail: React.FC = () => {
   console.log("Selected submission ID:", selectedSubmission?.submissionId);
   console.log("Compliance checks:", selectedSubmission?.complianceChecks);
 
+  // CRITICAL FIX: Add a verification check to only render when the IDs match
+  const isCorrectSubmission = selectedSubmission && selectedSubmission.submissionId === id;
+
   return (
     <div>
       <Box display="flex" alignItems="center" mb={3}>
@@ -313,7 +358,7 @@ const SubmissionDetail: React.FC = () => {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h5" component="h1">
-          Submission Details {selectedSubmission?.submissionId && `(ID: ${selectedSubmission.submissionId})`}
+          Submission Details {id && `(ID: ${id})`}
         </Typography>
       </Box>
 
@@ -347,7 +392,8 @@ const SubmissionDetail: React.FC = () => {
         </Alert>
       )}
 
-      {!loading && !error && selectedSubmission && (
+      {/* CRITICAL FIX: Only render when we have the correct submission */}
+      {!loading && !error && isCorrectSubmission && selectedSubmission && (
         <>
           {/* Header with submission metadata */}
           <Paper
@@ -370,7 +416,7 @@ const SubmissionDetail: React.FC = () => {
                   {selectedSubmission.insured?.name || 'Unknown Insured'}
                 </Typography>
                 <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                  {selectedSubmission.insured?.industry?.description || 'Unknown Industry'} | Submission ID: {selectedSubmission.submissionId || id}
+                  {selectedSubmission.insured?.industry?.description || 'Unknown Industry'} | Submission ID: {selectedSubmission.submissionId}
                 </Typography>
                 <Typography variant="body2">
                   {selectedSubmission.insured?.address?.street || ''}, {selectedSubmission.insured?.address?.city || ''},

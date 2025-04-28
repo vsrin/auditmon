@@ -1,5 +1,5 @@
 // src/components/submissions/SubmissionList.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -75,7 +75,7 @@ const SubmissionList: React.FC = () => {
     { id: 'status', label: 'Status', sortable: true },
   ];
 
-  // FIXED: Ensure rule engine provider is synced with current mode
+  // Ensure rule engine provider is synced with current mode
   useEffect(() => {
     if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
       console.log("SubmissionList - syncing rule engine mode:", isDemoMode);
@@ -122,7 +122,65 @@ const SubmissionList: React.FC = () => {
     }
   }, [dispatch, isDemoMode, submissions.length, loading]);
 
-  // Apply filters and sorting to submissions
+  // Helper function to safely get nested property values for sorting
+  const getNestedValue = useCallback((obj: any, path: string) => {
+    const keys = path.split('.');
+    let result = obj;
+    
+    for (const key of keys) {
+      if (result === null || result === undefined) return null;
+      result = result[key];
+    }
+    
+    return result;
+  }, []);
+
+  // Comparator function for sorting - moved inside useCallback
+  const descendingComparator = useCallback((a: any, b: any, orderBy: string) => {
+    const aValue = getNestedValue(a, orderBy);
+    const bValue = getNestedValue(b, orderBy);
+    
+    // Handle null/undefined values
+    if (bValue === null || bValue === undefined) return -1;
+    if (aValue === null || aValue === undefined) return 1;
+    
+    // Handle dates
+    if (orderBy === 'timestamp') {
+      return new Date(bValue).getTime() - new Date(aValue).getTime();
+    }
+    
+    // Handle strings case-insensitively
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return bValue.toLowerCase().localeCompare(aValue.toLowerCase());
+    }
+    
+    // Handle other types
+    if (bValue < aValue) return -1;
+    if (bValue > aValue) return 1;
+    return 0;
+  }, [getNestedValue]);
+
+  // Get comparator - moved inside useCallback
+  const getComparator = useCallback((order: Order, orderBy: string): (a: any, b: any) => number => {
+    return order === 'desc'
+      ? (a, b) => descendingComparator(a, b, orderBy)
+      : (a, b) => -descendingComparator(a, b, orderBy);
+  }, [descendingComparator]);
+
+  // Stable sort function - moved inside useCallback
+  const stableSort = useCallback(<T,>(array: readonly T[], comparator: (a: T, b: T) => number) => {
+    const stabilizedThis = array.map((el, index) => [el, index] as [T, number]);
+    stabilizedThis.sort((a, b) => {
+      const order = comparator(a[0], b[0]);
+      if (order !== 0) {
+        return order;
+      }
+      return a[1] - b[1];
+    });
+    return stabilizedThis.map((el) => el[0]);
+  }, []);
+
+  // Apply filters and sorting to submissions - fixed dependencies
   useEffect(() => {
     console.log(`Applying filters: Status=${statusFilter}, Search=${searchTerm}`);
     console.log(`Total submissions before filtering: ${submissions.length}`);
@@ -162,67 +220,7 @@ const SubmissionList: React.FC = () => {
     console.log(`Final filtered submissions: ${result.length}`);
     
     setFilteredSubmissions(result);
-  }, [submissions, statusFilter, searchTerm, order, orderBy]);
-
-  // Helper function to safely get nested property values for sorting
-  const getNestedValue = (obj: any, path: string) => {
-    const keys = path.split('.');
-    let result = obj;
-    
-    for (const key of keys) {
-      if (result === null || result === undefined) return null;
-      result = result[key];
-    }
-    
-    return result;
-  };
-
-  // Comparator function for sorting
-  function descendingComparator<T>(a: T, b: T, orderBy: string) {
-    const aValue = getNestedValue(a, orderBy);
-    const bValue = getNestedValue(b, orderBy);
-    
-    // Handle null/undefined values
-    if (bValue === null || bValue === undefined) return -1;
-    if (aValue === null || aValue === undefined) return 1;
-    
-    // Handle dates
-    if (orderBy === 'timestamp') {
-      return new Date(bValue).getTime() - new Date(aValue).getTime();
-    }
-    
-    // Handle strings case-insensitively
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return bValue.toLowerCase().localeCompare(aValue.toLowerCase());
-    }
-    
-    // Handle other types
-    if (bValue < aValue) return -1;
-    if (bValue > aValue) return 1;
-    return 0;
-  }
-
-  function getComparator<Key extends keyof any>(
-    order: Order,
-    orderBy: string,
-  ): (a: any, b: any) => number {
-    return order === 'desc'
-      ? (a, b) => descendingComparator(a, b, orderBy)
-      : (a, b) => -descendingComparator(a, b, orderBy);
-  }
-
-  // Stable sort function
-  function stableSort<T>(array: readonly T[], comparator: (a: T, b: T) => number) {
-    const stabilizedThis = array.map((el, index) => [el, index] as [T, number]);
-    stabilizedThis.sort((a, b) => {
-      const order = comparator(a[0], b[0]);
-      if (order !== 0) {
-        return order;
-      }
-      return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-  }
+  }, [submissions, statusFilter, searchTerm, order, orderBy, stableSort, getComparator]);
 
   // Handle sort request
   const handleRequestSort = (property: string) => {
@@ -238,28 +236,24 @@ const SubmissionList: React.FC = () => {
     navigate('/submissions');
   };
 
-  // FIXED: Handle row click - ensure context is cleared before navigation
+  // FIXED: Handle row click with simplified navigation logic
   const handleRowClick = (submissionId: string) => {
     if (!submissionId) {
       console.error('Invalid submission ID');
       return;
     }
     
-    // Clear any previously selected submission to ensure a fresh load
-    dispatch(clearSelectedSubmission());
-    
     try {
-      // Use React Router to navigate
-      console.log(`Navigating to submission ${submissionId}`);
+      // Clear selected submission first to ensure clean state
+      dispatch(clearSelectedSubmission());
       
-      // Force a small delay to ensure state is cleared before navigation
-      setTimeout(() => {
-        navigate(`/submissions/${submissionId}`);
-      }, 10);
+      // Use React Router's navigate function directly
+      console.log(`Navigating to submission ${submissionId}`);
+      navigate(`/submissions/${submissionId}`);
     } catch (error) {
       console.error('Navigation error:', error);
       
-      // Fallback to direct navigation if React Router fails
+      // Only use fallback if React Router's navigation fails
       window.location.href = `/submissions/${submissionId}`;
     }
   };
@@ -277,8 +271,8 @@ const SubmissionList: React.FC = () => {
     }
   };
 
-  // Get status chip based on status text
-  const getStatusChip = (status: string) => {
+  // FIXED: Get status chip based on status text with proper undefined handling
+  const getStatusChip = (status: string | undefined) => {
     if (!status) return <Chip label="Unknown" color="default" size="small" />;
     
     const statusLower = status.toLowerCase();
@@ -426,8 +420,8 @@ const SubmissionList: React.FC = () => {
                       sx={{ cursor: 'pointer' }}
                     >
                       <TableCell>{submission.submissionId}</TableCell>
-                      <TableCell>{submission.insured?.name}</TableCell>
-                      <TableCell>{submission.insured?.industry?.description}</TableCell>
+                      <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
+                      <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
                       <TableCell>{formatDate(submission.timestamp)}</TableCell>
                       <TableCell>{getStatusChip(submission.status)}</TableCell>
                     </TableRow>
