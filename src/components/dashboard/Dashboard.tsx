@@ -29,18 +29,22 @@ import {
   ErrorOutline as ErrorIcon,
   DescriptionOutlined as DocumentIcon,
   TrendingUp as TrendingUpIcon,
+  Refresh as RefreshIcon,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
 import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
-import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
+import { Submission } from '../../types';
+import useModeSwitching from '../../hooks/useModeSwitching';
+import { mockSubmissions } from '../../services/mock/mockData';
 
 // Import interface for AuditAlerts props
 interface AuditAlertsProps {
-  submissions: any[];
+  submissions: Submission[];
 }
 
-// Updated AuditAlerts component to match the image
+// AuditAlerts component
 const AuditAlerts: React.FC<AuditAlertsProps> = ({ submissions }) => {
   const navigate = useNavigate();
   
@@ -126,10 +130,12 @@ const Dashboard: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { submissions, loading, error } = useSelector((state: RootState) => state.submissions);
-  const { isDemoMode } = useSelector((state: RootState) => state.config);
+  const config = useSelector((state: RootState) => state.config);
+  const { isDemoMode, forceRefresh } = useModeSwitching('Dashboard');
   
-  const [loadingReports, setLoadingReports] = useState<boolean>(false);
-  const [showDemoNotice, setShowDemoNotice] = useState<boolean>(true); 
+  const [showDemoNotice, setShowDemoNotice] = useState<boolean>(true);
+  const [retryCount, setRetryCount] = useState<number>(0);
+  const [apiServerDown, setApiServerDown] = useState<boolean>(false);
   
   // Count statuses for metrics display
   const compliantCount = submissions.filter(s => s.status === 'Compliant').length;
@@ -137,36 +143,87 @@ const Dashboard: React.FC = () => {
   const nonCompliantCount = submissions.filter(s => s.status === 'Non-Compliant').length;
   
   // Calculate completion percentage
-  const submissionsCount = submissions.length;
-  const compliantPercentage = Math.round((compliantCount / submissionsCount) * 100) || 0;
-  
-  // Sync rule engine to current mode
-  useEffect(() => {
-    if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
-      ruleEngineProvider.setDemoMode(isDemoMode);
-    }
-  }, [isDemoMode]);
+  const submissionsCount = submissions.length || 0;
+  const compliantPercentage = submissionsCount > 0 ? Math.round((compliantCount / submissionsCount) * 100) : 0;
 
-  // Load submissions and reports on component mount
+  // Load submissions on component mount
   useEffect(() => {
-    // Initial load
-    const loadDataAndReports = async () => {
-      if (submissions.length === 0 || loading) {
-        // Load submissions
+    const loadSubmissions = async () => {
+      try {
+        // Set loading state
         dispatch(fetchSubmissionsStart());
-        try {
-          const data = await apiService.getSubmissions();
-          dispatch(fetchSubmissionsSuccess(data));
-        } catch (err) {
-          console.error('Error loading submissions:', err);
-          const errorMessage = err instanceof Error ? err.message : 'Failed to load submissions';
-          dispatch(fetchSubmissionsFailure(errorMessage));
+        
+        console.log("Dashboard - fetching submissions, demo mode:", isDemoMode);
+        
+        // If in Live mode but API server is known to be down, use demo data as fallback
+        if (!isDemoMode && apiServerDown) {
+          console.log("Dashboard - API server known to be unavailable, using demo data as fallback");
+          dispatch(fetchSubmissionsSuccess(mockSubmissions));
+          return;
+        }
+        
+        // Get submissions
+        apiService.setDemoMode(isDemoMode);
+        if (!isDemoMode) {
+          apiService.setApiEndpoint(config.apiEndpoint);
+        }
+        
+        const data = await apiService.getSubmissions();
+        
+        if (data.length === 0) {
+          throw new Error('No submissions returned');
+        }
+        
+        // Update the store with the fetched data
+        dispatch(fetchSubmissionsSuccess(data));
+        
+        // Reset retry counter and API server status on success
+        setRetryCount(0);
+        setApiServerDown(false);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        
+        // If in Live mode and we've exhausted retries, fall back to demo data
+        if (!isDemoMode && retryCount >= 2) {
+          console.log("Dashboard - API server unavailable after retries, using demo data as fallback");
+          setApiServerDown(true);
+          dispatch(fetchSubmissionsSuccess(mockSubmissions));
+          dispatch(fetchSubmissionsFailure(`Could not connect to ${config.apiEndpoint}. Using demo data as a fallback.`));
+          return;
+        }
+        
+        // Update the store with the error
+        dispatch(fetchSubmissionsFailure(errorMessage));
+        
+        // Try again a few times (only in live mode)
+        if (!isDemoMode && retryCount < 3) {
+          console.log(`Dashboard - Retry attempt ${retryCount + 1}/3`);
+          setRetryCount(prevRetryCount => prevRetryCount + 1);
+          
+          // Wait a moment before retrying
+          setTimeout(() => {
+            loadSubmissions();
+          }, 1000);
         }
       }
     };
     
-    loadDataAndReports();
-  }, [dispatch, isDemoMode, submissions.length, loading]);
+    // Only fetch if we don't already have submissions or if we're explicitly loading
+    // Avoid loading if we know the API server is down in Live mode
+    if ((submissions.length === 0 || loading) && !(apiServerDown && !isDemoMode)) {
+      loadSubmissions();
+    }
+  }, [dispatch, isDemoMode, submissions.length, loading, apiServerDown, retryCount, config.apiEndpoint]);
+
+  // Reset API server status when switching modes
+  useEffect(() => {
+    // When switching to demo mode, reset API server status
+    if (isDemoMode) {
+      setApiServerDown(false);
+      setRetryCount(0);
+    }
+  }, [isDemoMode]);
 
   // Handle card click to navigate
   const handleCardClick = (path: string) => {
@@ -176,6 +233,11 @@ const Dashboard: React.FC = () => {
   // Handle row click to navigate to submission detail
   const handleRowClick = (submissionId: string) => {
     navigate(`/submissions/${submissionId}`);
+  };
+
+  // Navigate to settings
+  const handleNavigateToSettings = () => {
+    navigate('/settings');
   };
 
   // Format date for display
@@ -207,9 +269,21 @@ const Dashboard: React.FC = () => {
   };
   
   // Get the 5 most recent submissions for the dashboard
-  const recentSubmissions = [...submissions]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 5);
+  const recentSubmissions = submissions.length > 0
+    ? [...submissions]
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 5)
+    : [];
+    
+  // Handle refresh button click  
+  const handleRefresh = () => {
+    // Reset API server status and retry count when manually refreshing
+    setApiServerDown(false);
+    setRetryCount(0);
+    
+    // Use the forceRefresh function from the useModeSwitching hook
+    forceRefresh();
+  };
 
   return (
     <Box my={4}>
@@ -217,8 +291,28 @@ const Dashboard: React.FC = () => {
         <Typography variant="h4" component="h1">
           Dashboard
           {isDemoMode && <Chip label="Demo Mode" size="small" color="default" sx={{ ml: 2 }} />}
+          {!isDemoMode && !apiServerDown && <Chip label="Live Mode" size="small" color="primary" sx={{ ml: 2 }} />}
+          {!isDemoMode && apiServerDown && <Chip label="Live Mode (Using Demo Data)" size="small" color="warning" sx={{ ml: 2 }} />}
         </Typography>
         <Box>
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            onClick={handleNavigateToSettings}
+            startIcon={<SettingsIcon />}
+            sx={{ mr: 2 }}
+          >
+            Settings
+          </Button>
+          <Button 
+            variant="outlined" 
+            color="primary" 
+            onClick={handleRefresh}
+            startIcon={<RefreshIcon />}
+            sx={{ mr: 2 }}
+          >
+            Refresh Data
+          </Button>
           <FormControlLabel
             control={
               <Switch 
@@ -240,8 +334,35 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
       
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+      {showDemoNotice && !isDemoMode && !apiServerDown && (
+        <Alert severity="info" sx={{ mb: 3 }} onClose={() => setShowDemoNotice(false)}>
+          <Typography variant="body2">
+            This dashboard is running in <strong>Live Mode</strong> and connecting to API at {config.apiEndpoint}. Make sure the API server is running.
+          </Typography>
+        </Alert>
+      )}
+      
+      {showDemoNotice && !isDemoMode && apiServerDown && (
+        <Alert severity="warning" sx={{ mb: 3 }} onClose={() => setShowDemoNotice(false)} 
+          action={
+            <Button color="inherit" size="small" onClick={handleNavigateToSettings}>
+              Configure API
+            </Button>
+          }
+        >
+          <Typography variant="body2">
+            <strong>API Server Unavailable</strong> - Could not connect to {config.apiEndpoint}. Using demo data as a fallback. 
+            Please check if the API server is running or configure a different API endpoint in Settings.
+          </Typography>
+        </Alert>
+      )}
+      
+      {error && !loading && !apiServerDown && (
+        <Alert severity="error" sx={{ mb: 3 }} action={
+          <Button color="inherit" size="small" onClick={handleRefresh}>
+            Retry
+          </Button>
+        }>
           {error}
         </Alert>
       )}
@@ -316,7 +437,7 @@ const Dashboard: React.FC = () => {
               </Box>
               <LinearProgress 
                 variant="determinate" 
-                value={(atRiskCount / submissionsCount) * 100 || 0} 
+                value={submissionsCount > 0 ? (atRiskCount / submissionsCount) * 100 : 0} 
                 color="warning"
                 sx={{ mt: 1, height: 8, borderRadius: 1 }}
               />
@@ -343,7 +464,7 @@ const Dashboard: React.FC = () => {
               </Box>
               <LinearProgress 
                 variant="determinate" 
-                value={(nonCompliantCount / submissionsCount) * 100 || 0} 
+                value={submissionsCount > 0 ? (nonCompliantCount / submissionsCount) * 100 : 0} 
                 color="error"
                 sx={{ mt: 1, height: 8, borderRadius: 1 }}
               />
@@ -367,7 +488,7 @@ const Dashboard: React.FC = () => {
               </Button>
             </Box>
             
-            {loading ? (
+            {loading && !apiServerDown ? (
               <Box display="flex" justifyContent="center" my={4}>
                 <CircularProgress />
               </Box>
@@ -406,13 +527,22 @@ const Dashboard: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">
                   No submissions available
                 </Typography>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleRefresh}
+                  startIcon={<RefreshIcon />}
+                  sx={{ mt: 2 }}
+                >
+                  Refresh Data
+                </Button>
               </Box>
             )}
           </Paper>
         </Grid>
         
         <Grid item xs={12} md={4}>
-          {/* Audit Alerts Panel - Updated to match the image */}
+          {/* Audit Alerts Panel */}
           <AuditAlerts submissions={submissions} />
         </Grid>
       </Grid>

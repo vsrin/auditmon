@@ -126,12 +126,11 @@ def generate_documents():
     for i in range(random.randint(2, 5)):
         doc_type = random.choice(doc_types)
         docs.append({
-            "doc_id": str(uuid.uuid4())[:8],
+            "id": str(uuid.uuid4())[:8],
             "name": f"{doc_type} - {datetime.now().strftime('%Y%m%d')}",
             "type": doc_type,
-            "upload_date": random_date(10),
-            "size_kb": random.randint(100, 5000),
-            "status": random.choice(["Processed", "Pending", "Failed"])
+            "status": random.choice(["Processed", "Pending", "Failed"]),
+            "size": random.randint(100, 5000)
         })
     
     return docs
@@ -182,12 +181,12 @@ def evaluate_compliance(submission):
         
     return {"checks": checks, "overall_status": overall_status}
 
-# Endpoint to get a list of submissions
+# Endpoint to get a list of submissions - MODIFIED to match dashboard expectations
 @app.route('/api/submissions', methods=['GET'])
 def get_submissions():
     submissions = []
     for _ in range(10):
-        submission = generate_submission_data()
+        submission_data = generate_submission_data()
         broker = generate_broker()
         insured = generate_insured()
         
@@ -195,35 +194,100 @@ def get_submissions():
         evaluation = evaluate_compliance({"insured": insured})
         status = evaluation["overall_status"]
         
+        # Flattened structure that matches dashboard expectations
         submissions.append({
-            "submission": submission,
-            "broker": broker,
-            "insured": insured,
+            "submissionId": submission_data["id"],
+            "insured": {
+                "name": insured["legal_name"],
+                "industry": {
+                    "code": insured["sic_code"],
+                    "description": insured["industry_description"]
+                },
+                "address": {
+                    "street": insured["address"]["line1"],
+                    "city": insured["address"]["city"],
+                    "state": insured["address"]["state"],
+                    "zip": insured["address"]["postal_code"]
+                },
+                "yearsInBusiness": insured["years_in_business"],
+                "employeeCount": insured["employee_count"]
+            },
+            "broker": {
+                "name": broker["company_name"],
+                "email": broker["email_address"]
+            },
+            "timestamp": submission_data["created_at"],
             "status": status
         })
     
     return jsonify(submissions)
 
-# Endpoint to get details for a specific submission
+# Endpoint to get details for a specific submission - MODIFIED to match dashboard expectations
 @app.route('/api/submissions/<submission_id>', methods=['GET'])
 def get_submission_detail(submission_id):
-    # For demo purposes, we'll generate random data regardless of the ID
-    submission = generate_submission_data()
-    submission["id"] = submission_id  # Use the requested ID
-    
+    # For demo purposes, we'll generate random data but use the requested ID
+    submission_data = generate_submission_data()
     broker = generate_broker()
     insured = generate_insured()
     
     # Evaluate compliance
     evaluation = evaluate_compliance({"insured": insured})
     
+    # Fetch documents and format compliance checks
+    documents = generate_documents()
+    formatted_checks = []
+    
+    for check in evaluation["checks"]:
+        formatted_check = {
+            "checkId": str(uuid.uuid4())[:8],
+            "category": check["check_type"],
+            "status": "compliant" if check["result"] == "Pass" else 
+                      "attention" if check["result"] == "Warning" else "non-compliant",
+            "findings": check["details"],
+            "timestamp": check["timestamp"],
+            "dataPoints": {}
+        }
+        
+        # Add data points for NAICS check
+        if check["check_type"] == "Risk Appetite":
+            formatted_check["dataPoints"] = {
+                "industryCode": insured["sic_code"],
+                "industryDescription": insured["industry_description"],
+                "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES) if check["result"] == "Fail" else ""
+            }
+        
+        formatted_checks.append(formatted_check)
+    
+    # Create a detailed response that matches what the dashboard expects
     detail = {
-        "submission": submission,
-        "broker": broker,
-        "insured": insured,
-        "risk_assessment": generate_risk_data(),
-        "documents": generate_documents(),
-        "compliance_checks": evaluation["checks"],
+        "submissionId": submission_id,  # Use the requested ID
+        "insured": {
+            "name": insured["legal_name"],
+            "industry": {
+                "code": insured["sic_code"],
+                "description": insured["industry_description"]
+            },
+            "address": {
+                "street": insured["address"]["line1"],
+                "city": insured["address"]["city"],
+                "state": insured["address"]["state"],
+                "zip": insured["address"]["postal_code"]
+            },
+            "yearsInBusiness": insured["years_in_business"],
+            "employeeCount": insured["employee_count"]
+        },
+        "broker": {
+            "name": broker["company_name"],
+            "email": broker["email_address"]
+        },
+        "coverage": {
+            "lines": submission_data["coverage_lines"],
+            "effectiveDate": submission_data["effective_date"],
+            "expirationDate": submission_data["expiration_date"]
+        },
+        "documents": documents,
+        "complianceChecks": formatted_checks,
+        "timestamp": submission_data["created_at"],
         "status": evaluation["overall_status"]
     }
     
@@ -263,7 +327,7 @@ def evaluate_submission_compliance():
     
     # Format response to match the frontend expectation
     response = {
-        "submissionId": submission.get("id", ""),
+        "submissionId": submission.get("submissionId", ""),
         "timestamp": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
         "checks": [],
         "overallStatus": results["overall_status"]
@@ -284,8 +348,8 @@ def evaluate_submission_compliance():
         # Add data points for NAICS check
         if check["check_type"] == "Risk Appetite":
             formatted_check["dataPoints"] = {
-                "industryCode": submission.get("insured", {}).get("sic_code", ""),
-                "industryDescription": submission.get("insured", {}).get("industry_description", ""),
+                "industryCode": submission.get("insured", {}).get("industry", {}).get("code", ""),
+                "industryDescription": submission.get("insured", {}).get("industry", {}).get("description", ""),
                 "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES) if check["result"] == "Fail" else ""
             }
         

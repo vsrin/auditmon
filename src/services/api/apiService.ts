@@ -1,198 +1,209 @@
 // src/services/api/apiService.ts
 import axios from 'axios';
+import { Submission, SubmissionDetail } from '../../types';
 import { mockSubmissions, getMockSubmissionDetail } from '../mock/mockData';
-import { SubmissionData, SubmissionDetail } from '../../types';
 
 class ApiService {
-  private isDemoMode: boolean = false;
-  private apiEndpoint: string = '';
-
-  setDemoMode(mode: boolean): void {
-    this.isDemoMode = mode;
+  private demoMode: boolean = true; // Default to demo mode
+  private apiEndpoint: string = 'http://localhost:8000/api'; // Default API endpoint
+  
+  /**
+   * Set the demo mode
+   * @param isDemoMode Whether the app is in demo mode
+   */
+  setDemoMode(isDemoMode: boolean): void {
+    // Only take action if the mode is actually changing
+    if (this.demoMode !== isDemoMode) {
+      console.log(`ApiService - Switching to ${isDemoMode ? 'DEMO' : 'LIVE'} mode`);
+      this.demoMode = isDemoMode;
+    }
   }
-
+  
+  /**
+   * Set the API endpoint
+   * @param endpoint The API endpoint URL
+   */
   setApiEndpoint(endpoint: string): void {
-    this.apiEndpoint = endpoint;
-  }
-
-  private applyMapping(data: any, mapping: Record<string, any>): any {
-    if (!mapping || !data) return data;
-    
-    const result: any = {};
-    
-    for (const [key, path] of Object.entries(mapping)) {
-      // Skip compliance checks as we handle them separately
-      if (key === 'complianceChecks') continue;
-      
-      if (typeof path === 'string') {
-        // Handle nested paths like "insured.name"
-        const parts = path.split('.');
-        let value = data;
-        
-        for (const part of parts) {
-          value = value && value[part];
-          if (value === undefined) break;
-        }
-        
-        result[key] = value;
-      } else if (typeof path === 'object') {
-        // Handle nested objects in mapping
-        result[key] = this.applyMapping(data, path);
-      }
+    if (endpoint.endsWith('/')) {
+      this.apiEndpoint = endpoint.slice(0, -1);
+    } else {
+      this.apiEndpoint = endpoint;
     }
-    
-    return result;
+    console.log(`ApiService - API Endpoint set to: ${this.apiEndpoint}`);
   }
-
-  async getSubmissions(): Promise<SubmissionData[]> {
-    if (this.isDemoMode) {
-      return mockSubmissions;
+  
+  /**
+   * Get the properly formatted endpoint URL with the path
+   * @param path The API path to append
+   * @returns Properly formatted URL
+   */
+  private getEndpointUrl(path: string): string {
+    // If the endpoint already includes /api, append the path directly
+    if (this.apiEndpoint.includes('/api')) {
+      return `${this.apiEndpoint}/${path}`;
     }
-
+    // Otherwise, include /api in the path
+    return `${this.apiEndpoint}/api/${path}`;
+  }
+  
+  /**
+   * Get all submissions
+   * @returns Promise with submissions data
+   */
+  async getSubmissions(): Promise<Submission[]> {
     try {
-      const response = await axios.get(`${this.apiEndpoint}/api/submissions`);
-      return response.data.map((item: any) => this.mapFlaskApiResponseToSubmission(item));
+      if (this.demoMode) {
+        console.log('ApiService.getSubmissions - Using mock data (DEMO MODE)');
+        // Simulate network delay in demo mode
+        await new Promise(resolve => setTimeout(resolve, 500)); 
+        return mockSubmissions;
+      }
+      
+      const endpoint = this.getEndpointUrl('submissions');
+      console.log(`ApiService.getSubmissions - Fetching from: ${endpoint}`);
+      const response = await axios.get(endpoint);
+      console.log(`ApiService.getSubmissions - Received ${response.data.length} submissions from API`);
+      
+      // Ensure the response data matches our expected format
+      return response.data.map((item: any) => this.mapSubmissionResponse(item));
     } catch (error) {
-      console.error('Error fetching submissions:', error);
+      console.error('ApiService.getSubmissions - Error:', error);
+      
+      if (this.demoMode) {
+        // In demo mode, fallback to mock data even if there's an error
+        console.log('ApiService.getSubmissions - Falling back to mock data after error');
+        return mockSubmissions;
+      }
+      
       throw error;
     }
   }
-
+  
+  /**
+   * Get submission detail
+   * @param id Submission ID
+   * @returns Promise with submission detail data
+   */
   async getSubmissionDetail(id: string): Promise<SubmissionDetail> {
-    if (this.isDemoMode) {
-      // In demo mode, we want to use the mock data directly with compliance checks
-      const submissionDetail = getMockSubmissionDetail(id);
-      if (!submissionDetail) {
-        throw new Error(`Submission with ID ${id} not found`);
+    try {
+      if (this.demoMode) {
+        console.log(`ApiService.getSubmissionDetail - Using mock data for ID: ${id} (DEMO MODE)`);
+        // Simulate network delay in demo mode
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const mockData = getMockSubmissionDetail(id);
+        if (!mockData) {
+          throw new Error(`Submission with ID ${id} not found in mock data`);
+        }
+        
+        return mockData;
       }
-      return submissionDetail; // Return the mock data with compliance checks included
-    }
-
-    try {
-      // Live mode - get data from API
-      const response = await axios.get(`${this.apiEndpoint}/api/submissions/${id}`);
-      return this.mapFlaskApiResponseToSubmission(response.data);
-    } catch (error) {
-      console.error(`Error fetching submission detail for ID ${id}:`, error);
-      throw error;
-    }
-  }
-
-  async getReports(): Promise<Record<string, any>> {
-    if (this.isDemoMode) {
-      // Create report data from mock submissions
-      return {
-        complianceStatus: {
-          compliant: mockSubmissions.filter(s => s.status === 'Compliant').length,
-          attention: mockSubmissions.filter(s => s.status === 'Requires Attention' || s.status === 'At Risk').length,
-          nonCompliant: mockSubmissions.filter(s => s.status === 'Non-Compliant').length
-        },
-        submissionTrends: {
-          labels: ['Jan', 'Feb', 'Mar', 'Apr'],
-          data: [12, 19, 15, 21]
-        }
-      };
-    }
-
-    try {
-      const submissions = await this.getSubmissions();
       
-      // Generate report from live data
-      return {
-        complianceStatus: {
-          compliant: submissions.filter(s => s.status === 'Compliant').length,
-          attention: submissions.filter(s => s.status === 'At Risk').length,
-          nonCompliant: submissions.filter(s => s.status === 'Non-Compliant').length
-        },
-        submissionTrends: {
-          labels: ['Jan', 'Feb', 'Mar', 'Apr'],
-          data: [submissions.length, submissions.length - 2, submissions.length - 4, submissions.length - 1]
-        }
-      };
+      const endpoint = this.getEndpointUrl(`submissions/${id}`);
+      console.log(`ApiService.getSubmissionDetail - Fetching from: ${endpoint}`);
+      const response = await axios.get(endpoint);
+      console.log(`ApiService.getSubmissionDetail - Received detail for ID: ${id}`);
+      
+      // Ensure the response data matches our expected format
+      return this.mapSubmissionDetailResponse(response.data);
     } catch (error) {
-      console.error('Error generating reports:', error);
+      console.error(`ApiService.getSubmissionDetail - Error fetching ID ${id}:`, error);
+      
+      if (this.demoMode) {
+        // In demo mode, check if we have mock data for this ID
+        const mockData = getMockSubmissionDetail(id);
+        if (mockData) {
+          console.log(`ApiService.getSubmissionDetail - Falling back to mock data for ID: ${id}`);
+          return mockData;
+        }
+      }
+      
       throw error;
     }
   }
-
-  // Helper method to map Flask API responses to our data model
-  private mapFlaskApiResponseToSubmission(apiData: any): SubmissionDetail {
-    // For submission list endpoint
-    if (apiData.submission) {
+  
+  /**
+   * Upload a document
+   * @param submissionId Submission ID
+   * @param file File to upload
+   * @returns Promise with upload result
+   */
+  async uploadDocument(submissionId: string, file: File): Promise<any> {
+    if (this.demoMode) {
+      console.log(`ApiService.uploadDocument - Simulating upload for submission ${submissionId} (DEMO MODE)`);
+      // Simulate network delay in demo mode
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       return {
-        submissionId: apiData.submission.id || 'Unknown',
-        timestamp: apiData.submission.created_at || new Date().toISOString(),
-        status: apiData.status || 'Unknown',
-        broker: {
-          name: apiData.broker.company_name || 'Unknown Broker',
-          email: apiData.broker.email_address || '',
-        },
-        insured: {
-          name: apiData.insured.legal_name || 'Unknown Insured',
-          industry: {
-            code: apiData.insured.sic_code || 'Unknown',
-            description: apiData.insured.industry_description || 'Unknown Industry',
-          },
-          address: {
-            street: apiData.insured.address.line1 || '',
-            city: apiData.insured.address.city || '',
-            state: apiData.insured.address.state || '',
-            zip: apiData.insured.address.postal_code || '',
-          },
-          yearsInBusiness: apiData.insured.years_in_business || 0,
-          employeeCount: apiData.insured.employee_count || 0,
-        },
-        coverage: {
-          lines: apiData.submission.coverage_lines || [],
-          effectiveDate: apiData.submission.effective_date || '',
-          expirationDate: apiData.submission.expiration_date || '',
-        },
-        documents: (apiData.documents || []).map((doc: any) => ({
-          id: doc.doc_id || Math.random().toString(),
-          name: doc.name || 'Unknown Document',
-          type: doc.type || 'Unknown Type',
-          status: doc.status?.toLowerCase() || 'unknown',
-          size: doc.size_kb || 0,
-        })),
-        complianceChecks: [] // Initialize empty, will be populated by rule engine
+        id: `DOC-${Date.now()}`,
+        name: file.name,
+        type: file.type,
+        status: 'processed',
+        size: file.size
       };
     }
     
-    // For submission list items
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('submissionId', submissionId);
+    
+    const endpoint = this.getEndpointUrl('documents');
+    console.log(`ApiService.uploadDocument - Uploading to: ${endpoint}`);
+    const response = await axios.post(endpoint, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    return response.data;
+  }
+  
+  /**
+   * Map API response to our Submission type
+   * @param data API response data
+   * @returns Mapped Submission object
+   */
+  private mapSubmissionResponse(data: any): Submission {
+    // Check if the data is already in our expected format
+    if (data.submissionId) {
+      return data as Submission;
+    }
+    
+    // Otherwise map from the API format
     return {
-      submissionId: apiData.submission?.id || 'Unknown',
-      timestamp: apiData.submission?.created_at || new Date().toISOString(),
-      status: apiData.status || 'Unknown',
-      broker: {
-        name: apiData.broker?.company_name || 'Unknown Broker',
-        email: apiData.broker?.email_address || '',
-      },
-      insured: {
-        name: apiData.insured?.legal_name || 'Unknown Insured',
-        industry: {
-          code: apiData.insured?.sic_code || 'Unknown',
-          description: apiData.insured?.industry_description || 'Unknown Industry',
-        },
-        address: {
-          street: apiData.insured?.address?.line1 || '',
-          city: apiData.insured?.address?.city || '',
-          state: apiData.insured?.address?.state || '',
-          zip: apiData.insured?.address?.postal_code || '',
-        },
-        yearsInBusiness: apiData.insured?.years_in_business || 0,
-        employeeCount: apiData.insured?.employee_count || 0,
-      },
-      coverage: {
-        lines: apiData.submission?.coverage_lines || [],
-        effectiveDate: apiData.submission?.effective_date || '',
-        expirationDate: apiData.submission?.expiration_date || '',
-      },
-      documents: [],
-      complianceChecks: [] 
+      submissionId: data.id || `SUB-${Math.floor(Math.random() * 90000) + 10000}`,
+      insured: data.insured,
+      broker: data.broker,
+      timestamp: data.timestamp || data.created_at || new Date().toISOString(),
+      status: data.status
+    };
+  }
+  
+  /**
+   * Map API response to our SubmissionDetail type
+   * @param data API response data
+   * @returns Mapped SubmissionDetail object
+   */
+  private mapSubmissionDetailResponse(data: any): SubmissionDetail {
+    // Check if the data is already in our expected format
+    if (data.submissionId && data.complianceChecks) {
+      return data as SubmissionDetail;
+    }
+    
+    // Otherwise map from the API format
+    return {
+      submissionId: data.submissionId || data.id || `SUB-${Math.floor(Math.random() * 90000) + 10000}`,
+      insured: data.insured,
+      broker: data.broker,
+      timestamp: data.timestamp || data.created_at || new Date().toISOString(),
+      status: data.status,
+      coverage: data.coverage,
+      documents: data.documents,
+      complianceChecks: data.complianceChecks || []
     };
   }
 }
 
-// Export a singleton instance
+// Export singleton instance
 const apiService = new ApiService();
 export default apiService;

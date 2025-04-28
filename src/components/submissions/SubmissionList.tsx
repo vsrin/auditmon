@@ -27,6 +27,7 @@ import {
   Search as SearchIcon,
   FilterList as FilterListIcon,
   Clear as ClearIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { RootState } from '../../store';
 import { 
@@ -36,7 +37,8 @@ import {
   clearSelectedSubmission
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
-import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
+import useModeSwitching from '../../hooks/useModeSwitching';
+import { Submission } from '../../types';
 
 // Define type for sort direction
 type Order = 'asc' | 'desc';
@@ -55,12 +57,13 @@ const SubmissionList: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { submissions, loading, error } = useSelector((state: RootState) => state.submissions);
-  const { isDemoMode } = useSelector((state: RootState) => state.config);
+  const { isDemoMode } = useModeSwitching('SubmissionList');
   
   // State for filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [filteredSubmissions, setFilteredSubmissions] = useState(submissions);
+  const [filteredSubmissions, setFilteredSubmissions] = useState<Submission[]>([]);
+  const [retryCount, setRetryCount] = useState(0);
   
   // State for sorting
   const [order, setOrder] = useState<Order>('desc');
@@ -74,14 +77,6 @@ const SubmissionList: React.FC = () => {
     { id: 'timestamp', label: 'Date Received', sortable: true },
     { id: 'status', label: 'Status', sortable: true },
   ];
-
-  // Ensure rule engine provider is synced with current mode
-  useEffect(() => {
-    if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
-      console.log("SubmissionList - syncing rule engine mode:", isDemoMode);
-      ruleEngineProvider.setDemoMode(isDemoMode);
-    }
-  }, [isDemoMode]);
 
   // Parse query parameters for filters
   useEffect(() => {
@@ -97,30 +92,48 @@ const SubmissionList: React.FC = () => {
     }
   }, [location.search]);
 
-  // Load submissions data
+  // Load submissions data with mode-aware logic
   useEffect(() => {
     // Clear any previously selected submission to prevent context confusion
     dispatch(clearSelectedSubmission());
     
-    // Only load if we don't already have submissions
-    if (submissions.length === 0 || loading) {
-      const loadSubmissions = async () => {
-        dispatch(fetchSubmissionsStart());
-        
-        try {
-          console.log("Fetching submissions, isDemoMode:", isDemoMode);
-          const data = await apiService.getSubmissions();
-          dispatch(fetchSubmissionsSuccess(data));
-        } catch (err) {
-          console.error('Error loading submissions:', err);
-          const errorMessage = err instanceof Error ? err.message : 'Failed to load submissions';
-          dispatch(fetchSubmissionsFailure(errorMessage));
-        }
-      };
+    // Function to load submissions
+    const loadSubmissions = async () => {
+      dispatch(fetchSubmissionsStart());
       
+      try {
+        console.log(`SubmissionList - Loading submissions in ${isDemoMode ? 'DEMO' : 'LIVE'} mode`);
+        const data = await apiService.getSubmissions();
+        
+        if (data.length === 0 && isDemoMode) {
+          throw new Error('No submissions returned from demo data');
+        }
+        
+        dispatch(fetchSubmissionsSuccess(data));
+        setRetryCount(0); // Reset retry count on success
+      } catch (err) {
+        console.error('Error loading submissions:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load submissions';
+        dispatch(fetchSubmissionsFailure(errorMessage));
+        
+        // Retry logic for demo mode
+        if (isDemoMode && retryCount < 3) {
+          console.log(`SubmissionList - Retry attempt ${retryCount + 1}/3`);
+          setRetryCount(prev => prev + 1);
+          
+          // Wait a moment before retrying
+          setTimeout(() => {
+            loadSubmissions();
+          }, 1000);
+        }
+      }
+    };
+    
+    // Load data if needed (empty or explicitly in loading state)
+    if (submissions.length === 0 || loading) {
       loadSubmissions();
     }
-  }, [dispatch, isDemoMode, submissions.length, loading]);
+  }, [dispatch, isDemoMode, submissions.length, loading, retryCount]);
 
   // Helper function to safely get nested property values for sorting
   const getNestedValue = useCallback((obj: any, path: string) => {
@@ -135,7 +148,7 @@ const SubmissionList: React.FC = () => {
     return result;
   }, []);
 
-  // Comparator function for sorting - moved inside useCallback
+  // Comparator function for sorting
   const descendingComparator = useCallback((a: any, b: any, orderBy: string) => {
     const aValue = getNestedValue(a, orderBy);
     const bValue = getNestedValue(b, orderBy);
@@ -160,14 +173,14 @@ const SubmissionList: React.FC = () => {
     return 0;
   }, [getNestedValue]);
 
-  // Get comparator - moved inside useCallback
+  // Get comparator based on sort direction
   const getComparator = useCallback((order: Order, orderBy: string): (a: any, b: any) => number => {
     return order === 'desc'
       ? (a, b) => descendingComparator(a, b, orderBy)
       : (a, b) => -descendingComparator(a, b, orderBy);
   }, [descendingComparator]);
 
-  // Stable sort function - moved inside useCallback
+  // Stable sort function
   const stableSort = useCallback(<T,>(array: readonly T[], comparator: (a: T, b: T) => number) => {
     const stabilizedThis = array.map((el, index) => [el, index] as [T, number]);
     stabilizedThis.sort((a, b) => {
@@ -180,19 +193,23 @@ const SubmissionList: React.FC = () => {
     return stabilizedThis.map((el) => el[0]);
   }, []);
 
-  // Apply filters and sorting to submissions - fixed dependencies
+  // Apply filters and sorting to submissions
   useEffect(() => {
+    if (submissions.length === 0) {
+      setFilteredSubmissions([]);
+      return;
+    }
+    
     console.log(`Applying filters: Status=${statusFilter}, Search=${searchTerm}`);
     console.log(`Total submissions before filtering: ${submissions.length}`);
     
     let result = [...submissions];
     
-    // Apply status filter - Using exact match for status
+    // Apply status filter
     if (statusFilter.toLowerCase() !== 'all') {
       console.log(`Filtering by status: ${statusFilter}`);
       
       result = result.filter(sub => {
-        // Ensure status exists and match exactly
         const subStatus = sub.status || '';
         return subStatus === statusFilter;
       });
@@ -236,25 +253,31 @@ const SubmissionList: React.FC = () => {
     navigate('/submissions');
   };
 
-  // FIXED: Handle row click with simplified navigation logic
+  // Handle row click (simplified and more reliable)
   const handleRowClick = (submissionId: string) => {
     if (!submissionId) {
       console.error('Invalid submission ID');
       return;
     }
     
+    // Clear selected submission before navigating
+    dispatch(clearSelectedSubmission());
+    
+    // Use the navigate function directly
+    navigate(`/submissions/${submissionId}`);
+  };
+
+  // Handle refresh button click
+  const handleRefresh = async () => {
+    dispatch(fetchSubmissionsStart());
+    
     try {
-      // Clear selected submission first to ensure clean state
-      dispatch(clearSelectedSubmission());
-      
-      // Use React Router's navigate function directly
-      console.log(`Navigating to submission ${submissionId}`);
-      navigate(`/submissions/${submissionId}`);
-    } catch (error) {
-      console.error('Navigation error:', error);
-      
-      // Only use fallback if React Router's navigation fails
-      window.location.href = `/submissions/${submissionId}`;
+      const data = await apiService.getSubmissions();
+      dispatch(fetchSubmissionsSuccess(data));
+    } catch (err) {
+      console.error('Error refreshing submissions:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh submissions';
+      dispatch(fetchSubmissionsFailure(errorMessage));
     }
   };
 
@@ -271,7 +294,7 @@ const SubmissionList: React.FC = () => {
     }
   };
 
-  // FIXED: Get status chip based on status text with proper undefined handling
+  // Get status chip based on status text
   const getStatusChip = (status: string | undefined) => {
     if (!status) return <Chip label="Unknown" color="default" size="small" />;
     
@@ -291,166 +314,190 @@ const SubmissionList: React.FC = () => {
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Insurance Submissions {statusFilter !== 'all' && `- ${statusFilter}`}
+          {isDemoMode && <Chip label="Demo Mode" size="small" color="default" sx={{ ml: 2 }} />}
         </Typography>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefresh}
+        >
+          Refresh
+        </Button>
       </Box>
       
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          action={
+            <Button color="inherit" size="small" onClick={handleRefresh}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+      
+      {/* Filters Toolbar */}
+      <Paper sx={{ mb: 3, p: 2 }}>
+        <Toolbar disableGutters sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+          <TextField
+            label="Search"
+            variant="outlined"
+            size="small"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{ flexGrow: 1, minWidth: '200px' }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+              endAdornment: searchTerm ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="clear search"
+                    onClick={() => setSearchTerm('')}
+                    edge="end"
+                    size="small"
+                  >
+                    <ClearIcon />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            }}
+          />
+          
+          <TextField
+            select
+            label="Status"
+            value={statusFilter}
+            onChange={(e) => {
+              const newStatus = e.target.value;
+              setStatusFilter(newStatus);
+              
+              // Update URL with status filter
+              if (newStatus === 'all') {
+                navigate('/submissions');
+              } else {
+                navigate(`/submissions?status=${newStatus}`);
+              }
+            }}
+            variant="outlined"
+            size="small"
+            sx={{ minWidth: '150px' }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <FilterListIcon />
+                </InputAdornment>
+              ),
+            }}
+          >
+            <MenuItem value="all">All Statuses</MenuItem>
+            <MenuItem value="Compliant">Compliant</MenuItem>
+            <MenuItem value="At Risk">At Risk</MenuItem>
+            <MenuItem value="Non-Compliant">Non-Compliant</MenuItem>
+          </TextField>
+          
+          <Button 
+            variant="outlined" 
+            onClick={handleClearFilters}
+            startIcon={<ClearIcon />}
+            disabled={statusFilter === 'all' && !searchTerm}
+          >
+            Clear Filters
+          </Button>
+        </Toolbar>
+      </Paper>
+      
+      {/* Display loading indicator when loading */}
       {loading && (
         <Box display="flex" justifyContent="center" my={4}>
           <CircularProgress />
         </Box>
       )}
       
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-      
-      {!loading && !error && (
-        <>
-          {/* Filters Toolbar */}
-          <Paper sx={{ mb: 3, p: 2 }}>
-            <Toolbar disableGutters sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              <TextField
-                label="Search"
-                variant="outlined"
-                size="small"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                sx={{ flexGrow: 1, minWidth: '200px' }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchTerm ? (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label="clear search"
-                        onClick={() => setSearchTerm('')}
-                        edge="end"
-                        size="small"
+      {/* Submissions Table with Sortable Columns */}
+      {!loading && (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                {headCells.map((headCell) => (
+                  <TableCell
+                    key={headCell.id}
+                    align={headCell.align || 'left'}
+                    width={headCell.width}
+                    sortDirection={orderBy === headCell.id ? order : false}
+                  >
+                    {headCell.sortable ? (
+                      <TableSortLabel
+                        active={orderBy === headCell.id}
+                        direction={orderBy === headCell.id ? order : 'asc'}
+                        onClick={() => handleRequestSort(headCell.id)}
                       >
-                        <ClearIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ) : null,
-                }}
-              />
-              
-              <TextField
-                select
-                label="Status"
-                value={statusFilter}
-                onChange={(e) => {
-                  const newStatus = e.target.value;
-                  setStatusFilter(newStatus);
-                  console.log(`Status filter changed to: ${newStatus}`);
-                  
-                  // Update URL with status filter
-                  if (newStatus === 'all') {
-                    navigate('/submissions');
-                  } else {
-                    navigate(`/submissions?status=${newStatus}`);
-                  }
-                }}
-                variant="outlined"
-                size="small"
-                sx={{ minWidth: '150px' }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <FilterListIcon />
-                    </InputAdornment>
-                  ),
-                }}
-              >
-                <MenuItem value="all">All Statuses</MenuItem>
-                <MenuItem value="Compliant">Compliant</MenuItem>
-                <MenuItem value="At Risk">At Risk</MenuItem>
-                <MenuItem value="Non-Compliant">Non-Compliant</MenuItem>
-              </TextField>
-              
-              <Button 
-                variant="outlined" 
-                onClick={handleClearFilters}
-                startIcon={<ClearIcon />}
-                disabled={statusFilter === 'all' && !searchTerm}
-              >
-                Clear Filters
-              </Button>
-            </Toolbar>
-          </Paper>
-          
-          {/* Submissions Table with Sortable Columns */}
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  {headCells.map((headCell) => (
-                    <TableCell
-                      key={headCell.id}
-                      align={headCell.align || 'left'}
-                      width={headCell.width}
-                      sortDirection={orderBy === headCell.id ? order : false}
-                    >
-                      {headCell.sortable ? (
-                        <TableSortLabel
-                          active={orderBy === headCell.id}
-                          direction={orderBy === headCell.id ? order : 'asc'}
-                          onClick={() => handleRequestSort(headCell.id)}
-                        >
-                          {headCell.label}
-                        </TableSortLabel>
-                      ) : (
-                        headCell.label
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredSubmissions.length > 0 ? (
-                  filteredSubmissions.map((submission) => (
-                    <TableRow 
-                      key={submission.submissionId}
-                      hover
-                      onClick={() => handleRowClick(submission.submissionId)}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <TableCell>{submission.submissionId}</TableCell>
-                      <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
-                      <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
-                      <TableCell>{formatDate(submission.timestamp)}</TableCell>
-                      <TableCell>{getStatusChip(submission.status)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      <Box p={3}>
-                        <Typography variant="body1">
-                          No submissions match the current filters
-                        </Typography>
-                        {(statusFilter !== 'all' || searchTerm) && (
-                          <Button 
-                            variant="text" 
-                            color="primary" 
-                            onClick={handleClearFilters}
-                            sx={{ mt: 1 }}
-                          >
-                            Clear Filters
-                          </Button>
-                        )}
-                      </Box>
-                    </TableCell>
+                        {headCell.label}
+                      </TableSortLabel>
+                    ) : (
+                      headCell.label
+                    )}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredSubmissions.length > 0 ? (
+                filteredSubmissions.map((submission) => (
+                  <TableRow 
+                    key={submission.submissionId}
+                    hover
+                    onClick={() => handleRowClick(submission.submissionId)}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <TableCell>{submission.submissionId}</TableCell>
+                    <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
+                    <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
+                    <TableCell>{formatDate(submission.timestamp)}</TableCell>
+                    <TableCell>{getStatusChip(submission.status)}</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    <Box p={3}>
+                      <Typography variant="body1">
+                        No submissions match the current filters
+                      </Typography>
+                      {(statusFilter !== 'all' || searchTerm) ? (
+                        <Button 
+                          variant="text" 
+                          color="primary" 
+                          onClick={handleClearFilters}
+                          sx={{ mt: 1 }}
+                        >
+                          Clear Filters
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="outlined" 
+                          color="primary" 
+                          onClick={handleRefresh}
+                          startIcon={<RefreshIcon />}
+                          sx={{ mt: 2 }}
+                        >
+                          Refresh Data
+                        </Button>
+                      )}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </Box>
   );
