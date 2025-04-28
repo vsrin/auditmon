@@ -17,18 +17,21 @@ import {
   Alert,
   Grid,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  CloudSync as CloudSyncIcon
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import apiService from '../../services/api/apiService';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
-import { fetchSubmissionsSuccess } from '../../store/slices/submissionSlice';
+import { fetchSubmissionsSuccess, fetchSubmissionsStart } from '../../store/slices/submissionSlice';
+import { useLocation } from 'react-router-dom';
 
 // Demo rules for NAICS code restrictions
 const initialRestrictedCodes = [
@@ -39,144 +42,264 @@ const initialRestrictedCodes = [
 
 const RuleEngineDemo: React.FC = () => {
   const dispatch = useDispatch();
-  const { submissions } = useSelector((state: RootState) => state.submissions);
+  const location = useLocation();
+  const { submissions, loading: submissionsLoading } = useSelector((state: RootState) => state.submissions);
   const { isDemoMode } = useSelector((state: RootState) => state.config);
   
-  // Initialize with codes from the rule engine provider
-  const providerCodes = ruleEngineProvider.getRestrictedNaicsCodes?.() || 
-                       initialRestrictedCodes.map(c => c.code);
-  
-  const initialCodes = providerCodes.map(code => {
-    const found = initialRestrictedCodes.find(c => c.code === code);
-    return found || { 
-      code, 
-      description: `Industry with code ${code}` 
-    };
-  });
-  
-  const [restrictedCodes, setRestrictedCodes] = useState(initialCodes);
+  const [restrictedCodes, setRestrictedCodes] = useState<Array<{code: string, description: string}>>([]);
   const [newCode, setNewCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [isRuleActive, setIsRuleActive] = useState(
-    ruleEngineProvider.isNaicsRuleEnabled?.() !== false
-  );
+  const [isRuleActive, setIsRuleActive] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [syncingWithBackend, setSyncingWithBackend] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
   const [affectedSubmissions, setAffectedSubmissions] = useState<any[]>([]);
 
+  // Log current mode on mount
+  useEffect(() => {
+    console.log("RuleEngineDemo mounted - Current mode:", isDemoMode ? "DEMO" : "LIVE");
+    console.log("Current location:", location.pathname);
+    
+    const previousMode = localStorage.getItem('previousMode');
+    if (previousMode) {
+      console.log("Found previous mode in localStorage:", previousMode);
+      // Clear the stored mode after using it
+      localStorage.removeItem('previousMode');
+    }
+    
+    // Ensure rule engine provider is synced with current mode
+    if (ruleEngineProvider.setDemoMode) {
+      console.log("RuleEngineDemo - syncing rule engine demo mode:", isDemoMode);
+      ruleEngineProvider.setDemoMode(isDemoMode);
+    }
+  }, [isDemoMode, location]);
+
+  // Initial fetch of restricted codes from backend
+  useEffect(() => {
+    const fetchRestrictedCodes = async () => {
+      setSyncingWithBackend(true);
+      try {
+        // Fetch restricted codes from the provider (which will fetch from backend)
+        await ruleEngineProvider.fetchRestrictedCodesFromBackend();
+        const codes = ruleEngineProvider.getRestrictedNaicsCodes();
+        const enabled = ruleEngineProvider.isNaicsRuleEnabled();
+        
+        // Convert to the format used by the UI
+        const formattedCodes = codes.map(code => {
+          const found = initialRestrictedCodes.find(c => c.code === code);
+          return found || { code, description: `Industry with code ${code}` };
+        });
+        
+        setRestrictedCodes(formattedCodes);
+        setIsRuleActive(enabled);
+        setMessage({ type: 'success', text: 'Synchronized with backend rules' });
+      } catch (error) {
+        console.error('Error fetching restricted codes:', error);
+        setMessage({ type: 'error', text: 'Failed to synchronize with backend' });
+        
+        // Fall back to default values
+        setRestrictedCodes(initialRestrictedCodes);
+      } finally {
+        setSyncingWithBackend(false);
+      }
+    };
+    
+    fetchRestrictedCodes();
+  }, []);
+
   // Function to add a new restricted NAICS code
-  const handleAddCode = () => {
+  const handleAddCode = async () => {
     if (!newCode.trim()) {
       setMessage({ type: 'error', text: 'NAICS code is required' });
       return;
     }
     
-    const newRestrictedCodes = [
-      ...restrictedCodes,
-      { 
-        code: newCode.trim(), 
-        description: newDescription.trim() || `Industry with code ${newCode.trim()}` 
-      }
-    ];
+    setLoading(true);
     
-    setRestrictedCodes(newRestrictedCodes);
-    setNewCode('');
-    setNewDescription('');
-    setMessage({ type: 'success', text: `Added NAICS code ${newCode.trim()} to restricted list` });
-    
-    // Apply the rule changes
-    applyRuleChanges(newRestrictedCodes);
+    try {
+      const newRestrictedCodes = [
+        ...restrictedCodes,
+        { 
+          code: newCode.trim(), 
+          description: newDescription.trim() || `Industry with code ${newCode.trim()}` 
+        }
+      ];
+      
+      setRestrictedCodes(newRestrictedCodes);
+      setNewCode('');
+      setNewDescription('');
+      
+      // Update the backend
+      await ruleEngineProvider.updateRestrictedNaicsCodes(newRestrictedCodes.map(c => c.code));
+      
+      setMessage({ type: 'success', text: `Added NAICS code ${newCode.trim()} to restricted list` });
+      
+      // Apply the rule changes
+      await applyRuleChanges(newRestrictedCodes);
+    } catch (error) {
+      console.error('Error adding code:', error);
+      setMessage({ type: 'error', text: `Failed to add NAICS code: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Function to remove a restricted NAICS code
-  const handleRemoveCode = (codeToRemove: string) => {
-    const newRestrictedCodes = restrictedCodes.filter(item => item.code !== codeToRemove);
-    setRestrictedCodes(newRestrictedCodes);
-    setMessage({ type: 'info', text: `Removed NAICS code ${codeToRemove} from restricted list` });
+  const handleRemoveCode = async (codeToRemove: string) => {
+    setLoading(true);
     
-    // Apply the rule changes
-    applyRuleChanges(newRestrictedCodes);
+    try {
+      const newRestrictedCodes = restrictedCodes.filter(item => item.code !== codeToRemove);
+      setRestrictedCodes(newRestrictedCodes);
+      
+      // Update the backend
+      await ruleEngineProvider.updateRestrictedNaicsCodes(newRestrictedCodes.map(c => c.code));
+      
+      setMessage({ type: 'info', text: `Removed NAICS code ${codeToRemove} from restricted list` });
+      
+      // Apply the rule changes
+      await applyRuleChanges(newRestrictedCodes);
+    } catch (error) {
+      console.error('Error removing code:', error);
+      setMessage({ type: 'error', text: `Failed to remove NAICS code: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Function to toggle the rule active state
-  const handleToggleRule = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setIsRuleActive(event.target.checked);
+  const handleToggleRule = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newActiveState = event.target.checked;
+    setLoading(true);
     
-    // Update the rule engine provider
-    if (ruleEngineProvider.setNaicsRuleEnabled) {
-      ruleEngineProvider.setNaicsRuleEnabled(event.target.checked);
-    }
-    
-    if (event.target.checked) {
-      setMessage({ type: 'info', text: 'NAICS code restriction rule activated' });
-      applyRuleChanges(restrictedCodes);
-    } else {
-      setMessage({ type: 'info', text: 'NAICS code restriction rule deactivated' });
+    try {
+      setIsRuleActive(newActiveState);
       
-      // Reset submissions to compliant status if rule is deactivated
-      if (isDemoMode) {
-        const updatedSubmissions = submissions.map(sub => ({
-          ...sub,
-          status: restrictedCodes.some(code => 
-            code.code === (sub.insured?.industry?.code || '')
-          ) ? 'Compliant' : sub.status
-        }));
-        
-        dispatch(fetchSubmissionsSuccess(updatedSubmissions));
-        findAffectedSubmissions(updatedSubmissions, []);
+      // Update the backend
+      await ruleEngineProvider.setNaicsRuleEnabled(newActiveState);
+      
+      if (newActiveState) {
+        setMessage({ type: 'info', text: 'NAICS code restriction rule activated' });
+        await applyRuleChanges(restrictedCodes);
+      } else {
+        setMessage({ type: 'info', text: 'NAICS code restriction rule deactivated' });
+        await resetSubmissionsCompliance();
       }
+    } catch (error) {
+      console.error('Error toggling rule:', error);
+      setMessage({ type: 'error', text: `Failed to toggle rule: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setLoading(false);
     }
   };
 
   // Function to reset to initial rules
-  const handleReset = () => {
-    setRestrictedCodes(initialRestrictedCodes);
-    setIsRuleActive(true);
-    setMessage({ type: 'info', text: 'Reset to initial restricted NAICS codes' });
-    
-    // Update the rule engine provider
-    if (ruleEngineProvider.setNaicsRuleEnabled) {
-      ruleEngineProvider.setNaicsRuleEnabled(true);
-    }
-    
-    // Apply the initial rules
-    applyRuleChanges(initialRestrictedCodes);
-  };
-
-  // Apply rule changes to submissions
-  const applyRuleChanges = (currentRestrictedCodes: typeof restrictedCodes) => {
+  const handleReset = async () => {
     setLoading(true);
     
     try {
-      // Update the rule engine provider
-      const restrictedCodeValues = currentRestrictedCodes.map(code => code.code);
-      if (ruleEngineProvider.updateRestrictedNaicsCodes) {
-        ruleEngineProvider.updateRestrictedNaicsCodes(restrictedCodeValues);
-      }
+      setRestrictedCodes(initialRestrictedCodes);
+      setIsRuleActive(true);
       
-      if (isDemoMode && isRuleActive) {
-        // In demo mode, we'll apply the rules directly to the submission data
-        const updatedSubmissions = submissions.map(sub => {
-          const industryCode = sub.insured?.industry?.code || '';
-          const isRestricted = currentRestrictedCodes.some(code => code.code === industryCode);
-          
-          return {
-            ...sub,
-            status: isRestricted ? 'Non-Compliant' : sub.status
-          };
-        });
-        
-        dispatch(fetchSubmissionsSuccess(updatedSubmissions));
-        findAffectedSubmissions(updatedSubmissions, currentRestrictedCodes);
-      } else {
-        // In live mode, the rule engine will handle evaluation
-        findAffectedSubmissions(submissions, isRuleActive ? currentRestrictedCodes : []);
-      }
+      // Update the backend
+      await ruleEngineProvider.setNaicsRuleEnabled(true);
+      await ruleEngineProvider.updateRestrictedNaicsCodes(initialRestrictedCodes.map(c => c.code));
+      
+      setMessage({ type: 'info', text: 'Reset to initial restricted NAICS codes' });
+      
+      // Apply the initial rules
+      await applyRuleChanges(initialRestrictedCodes);
     } catch (error) {
-      console.error('Error applying rule changes:', error);
-      setMessage({ type: 'error', text: 'Failed to apply rule changes' });
+      console.error('Error resetting rules:', error);
+      setMessage({ type: 'error', text: `Failed to reset rules: ${error instanceof Error ? error.message : 'Unknown error'}` });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to manually sync with backend
+  const handleSyncWithBackend = async () => {
+    setSyncingWithBackend(true);
+    
+    try {
+      // Fetch restricted codes from the provider (which will fetch from backend)
+      await ruleEngineProvider.fetchRestrictedCodesFromBackend();
+      const codes = ruleEngineProvider.getRestrictedNaicsCodes();
+      const enabled = ruleEngineProvider.isNaicsRuleEnabled();
+      
+      // Convert to the format used by the UI
+      const formattedCodes = codes.map(code => {
+        const found = initialRestrictedCodes.find(c => c.code === code);
+        return found || { code, description: `Industry with code ${code}` };
+      });
+      
+      setRestrictedCodes(formattedCodes);
+      setIsRuleActive(enabled);
+      
+      // Apply the rule changes
+      await applyRuleChanges(formattedCodes);
+      
+      setMessage({ type: 'success', text: 'Synchronized with backend rules' });
+    } catch (error) {
+      console.error('Error syncing with backend:', error);
+      setMessage({ type: 'error', text: `Failed to synchronize with backend: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    } finally {
+      setSyncingWithBackend(false);
+    }
+  };
+
+  // Reset submission compliance statuses when rule is disabled
+  const resetSubmissionsCompliance = async () => {
+    if (!isDemoMode) {
+      // For live mode, fetch from API
+      try {
+        dispatch(fetchSubmissionsStart());
+        const data = await apiService.getSubmissions();
+        dispatch(fetchSubmissionsSuccess(data));
+        findAffectedSubmissions(data, []);
+      } catch (error) {
+        console.error('Error refreshing submissions:', error);
+      }
+    } else {
+      // For demo mode, we can manually update statuses
+      const updatedSubmissions = submissions.map(sub => {
+        const industryCode = sub.insured?.industry?.code || '';
+        const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
+        
+        // Only reset the status if it was previously marked as non-compliant due to NAICS
+        return wasRestricted 
+          ? { ...sub, status: 'Compliant' } 
+          : sub;
+      });
+      
+      dispatch(fetchSubmissionsSuccess(updatedSubmissions));
+      findAffectedSubmissions(updatedSubmissions, []);
+    }
+  };
+
+  // Apply rule changes to submissions
+  const applyRuleChanges = async (currentRestrictedCodes: typeof restrictedCodes) => {
+    try {
+      // Refresh submissions to see the effects of the rule changes
+      if (!isDemoMode) {
+        // For live mode, fetch from API
+        dispatch(fetchSubmissionsStart());
+        const data = await apiService.getSubmissions();
+        dispatch(fetchSubmissionsSuccess(data));
+        findAffectedSubmissions(data, isRuleActive ? currentRestrictedCodes : []);
+      } else {
+        // For demo mode, manually refresh submissions
+        dispatch(fetchSubmissionsStart());
+        const data = await apiService.getSubmissions();
+        dispatch(fetchSubmissionsSuccess(data));
+        findAffectedSubmissions(data, isRuleActive ? currentRestrictedCodes : []);
+      }
+    } catch (error) {
+      console.error('Error refreshing submissions:', error);
+      setMessage({ type: 'error', text: 'Failed to refresh submissions' });
+      
+      // Still update the affected submissions display based on current data
+      findAffectedSubmissions(submissions, isRuleActive ? currentRestrictedCodes : []);
     }
   };
 
@@ -195,16 +318,28 @@ const RuleEngineDemo: React.FC = () => {
     setAffectedSubmissions(affected);
   };
 
-  // Initial setup
+  // Update affected submissions when submissions data changes
   useEffect(() => {
     findAffectedSubmissions(submissions, isRuleActive ? restrictedCodes : []);
-  }, [submissions]);
+  }, [submissions, isRuleActive, restrictedCodes]);
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        Rule Engine Demonstration - NAICS Code Restrictions
-      </Typography>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+        <Typography variant="h5">
+          Rule Engine Demonstration - NAICS Code Restrictions
+          {isDemoMode && <Chip label="Demo Mode" size="small" color="default" sx={{ ml: 2 }} />}
+          {!isDemoMode && <Chip label="Live Mode" size="small" color="primary" sx={{ ml: 2 }} />}
+        </Typography>
+        <Button
+          variant="outlined"
+          startIcon={<CloudSyncIcon />}
+          onClick={handleSyncWithBackend}
+          disabled={syncingWithBackend}
+        >
+          {syncingWithBackend ? <CircularProgress size={24} /> : 'Sync with Backend'}
+        </Button>
+      </Box>
       
       {message && (
         <Alert 
@@ -227,6 +362,7 @@ const RuleEngineDemo: React.FC = () => {
                     checked={isRuleActive}
                     onChange={handleToggleRule}
                     color="primary"
+                    disabled={loading}
                   />
                 }
                 label={isRuleActive ? "Rule Active" : "Rule Inactive"}
@@ -235,40 +371,47 @@ const RuleEngineDemo: React.FC = () => {
             
             <Divider sx={{ mb: 2 }} />
             
-            <List sx={{ mb: 3 }}>
-              {restrictedCodes.map((item) => (
-                <ListItem
-                  key={item.code}
-                  secondaryAction={
-                    <IconButton 
-                      edge="end" 
-                      aria-label="delete"
-                      onClick={() => handleRemoveCode(item.code)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Chip label={item.code} color="primary" size="small" sx={{ mr: 1 }} />
-                        <Typography variant="body1">{item.description}</Typography>
-                      </Box>
+            {loading ? (
+              <Box display="flex" justifyContent="center" my={4}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <List sx={{ mb: 3 }}>
+                {restrictedCodes.map((item) => (
+                  <ListItem
+                    key={item.code}
+                    secondaryAction={
+                      <IconButton 
+                        edge="end" 
+                        aria-label="delete"
+                        onClick={() => handleRemoveCode(item.code)}
+                        disabled={loading}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
                     }
-                  />
-                </ListItem>
-              ))}
-              
-              {restrictedCodes.length === 0 && (
-                <ListItem>
-                  <ListItemText
-                    primary="No restricted NAICS codes"
-                    secondary="Add codes to restrict certain industries"
-                  />
-                </ListItem>
-              )}
-            </List>
+                  >
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Chip label={item.code} color="primary" size="small" sx={{ mr: 1 }} />
+                          <Typography variant="body1">{item.description}</Typography>
+                        </Box>
+                      }
+                    />
+                  </ListItem>
+                ))}
+                
+                {restrictedCodes.length === 0 && (
+                  <ListItem>
+                    <ListItemText
+                      primary="No restricted NAICS codes"
+                      secondary="Add codes to restrict certain industries"
+                    />
+                  </ListItem>
+                )}
+              </List>
+            )}
             
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
               <TextField
@@ -277,6 +420,7 @@ const RuleEngineDemo: React.FC = () => {
                 onChange={(e) => setNewCode(e.target.value)}
                 size="small"
                 sx={{ width: '150px' }}
+                disabled={loading}
               />
               <TextField
                 label="Description (Optional)"
@@ -284,6 +428,7 @@ const RuleEngineDemo: React.FC = () => {
                 onChange={(e) => setNewDescription(e.target.value)}
                 size="small"
                 sx={{ flexGrow: 1 }}
+                disabled={loading}
               />
             </Box>
             
@@ -292,7 +437,7 @@ const RuleEngineDemo: React.FC = () => {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={handleAddCode}
-                disabled={loading}
+                disabled={loading || !newCode.trim()}
               >
                 Add Restricted Code
               </Button>
@@ -310,8 +455,8 @@ const RuleEngineDemo: React.FC = () => {
           
           <Alert severity="info" sx={{ mb: 3 }}>
             <Typography variant="body2">
-              This demo shows how the rule engine can dynamically apply compliance rules.
-              Adding or removing NAICS codes will immediately affect the compliance status
+              This demo shows how the rule engine can dynamically apply compliance rules from the backend.
+              Adding or removing NAICS codes in the backend will immediately affect the compliance status
               of submissions in those industries.
             </Typography>
           </Alert>
@@ -333,7 +478,11 @@ const RuleEngineDemo: React.FC = () => {
             
             <Divider sx={{ mb: 2 }} />
             
-            {isRuleActive ? (
+            {submissionsLoading ? (
+              <Box display="flex" justifyContent="center" my={4}>
+                <CircularProgress />
+              </Box>
+            ) : isRuleActive ? (
               <>
                 {affectedSubmissions.length > 0 ? (
                   <Box sx={{ maxHeight: '400px', overflow: 'auto' }}>

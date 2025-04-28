@@ -34,6 +34,7 @@ import apiService from '../../services/api/apiService';
 import { fetchSubmissionsStart, fetchSubmissionsSuccess, fetchSubmissionsFailure } from '../../store/slices/submissionSlice';
 import { SubmissionData } from '../../types';
 import { mockSubmissions } from '../../services/mock/mockData'; // Import mock data
+import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 
 // Styled components for metrics cards
 const MetricCard = styled(Card)(({ theme, bgcolor }: { theme?: any, bgcolor: string }) => ({
@@ -118,26 +119,39 @@ const Dashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<any>(defaultDashboardData);
   const [initialized, setInitialized] = useState(false);
 
-  // Calculate metrics based on the mockSubmissions data for demo mode
-  // For live mode, use the actual submissions data
-  const totalSubmissions = isDemoMode ? mockSubmissions.length : submissions.length;
-  const compliantSubmissions = isDemoMode 
-    ? mockSubmissions.filter(sub => sub.status === 'Compliant').length 
-    : submissions.filter(sub => sub.status === 'Compliant').length;
-  const atRiskSubmissions = isDemoMode
-    ? mockSubmissions.filter(sub => sub.status === 'At Risk').length
-    : submissions.filter(sub => sub.status === 'At Risk').length;
-  const nonCompliantSubmissions = isDemoMode
-    ? mockSubmissions.filter(sub => sub.status === 'Non-Compliant').length
-    : submissions.filter(sub => sub.status === 'Non-Compliant').length;
+  // Calculate metrics based on the submissions data
+  const getSubmissionCounts = useCallback(() => {
+    // Ensure we're using either the fetched submissions or mock data if in demo mode
+    const activeSubmissions = submissions.length > 0 ? submissions : (isDemoMode ? mockSubmissions : []);
+    
+    return {
+      total: activeSubmissions.length,
+      compliant: activeSubmissions.filter(sub => sub.status === 'Compliant').length,
+      atRisk: activeSubmissions.filter(sub => sub.status === 'At Risk').length,
+      nonCompliant: activeSubmissions.filter(sub => sub.status === 'Non-Compliant').length
+    };
+  }, [submissions, isDemoMode]);
 
-  // Sample audit control data - could also be calculated from mock data
-  const auditControlData = [
-    { name: 'Documents Complete', value: 75 },
-    { name: 'In Risk Appetite', value: 25 },
-    { name: 'Loss History Issues', value: 0 },
-    { name: 'Needs Financial Review', value: 0 }
-  ];
+  const {
+    total: totalSubmissions,
+    compliant: compliantSubmissions,
+    atRisk: atRiskSubmissions,
+    nonCompliant: nonCompliantSubmissions
+  } = getSubmissionCounts();
+
+  // Sample audit control data calculated from actual submissions
+  const getAuditControlData = useCallback(() => {
+    const counts = getSubmissionCounts();
+    
+    return [
+      { name: 'Documents Complete', value: counts.compliant },
+      { name: 'In Risk Appetite', value: counts.total - counts.nonCompliant - counts.atRisk },
+      { name: 'Loss History Issues', value: counts.atRisk },
+      { name: 'Financial Concerns', value: counts.nonCompliant }
+    ];
+  }, [getSubmissionCounts]);
+
+  const auditControlData = getAuditControlData();
 
   // Generate synthetic submissions - use mockSubmissions directly
   const generateSyntheticSubmissions = useCallback((): SubmissionData[] => {
@@ -247,9 +261,18 @@ const Dashboard: React.FC = () => {
     navigate('/alerts');
   };
 
-  // Handler for Rule Engine Demo button
+  // FIXED: Handler for Rule Engine Demo button - ensure rule engine provider knows current mode
   const handleRuleEngineDemoClick = () => {
-    navigate('/alerts?tab=rule-engine');
+    // Ensure the rule engine provider maintains the current mode
+    if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
+      ruleEngineProvider.setDemoMode(isDemoMode);
+      console.log(`Rule engine mode explicitly set before navigation: ${isDemoMode ? 'DEMO' : 'LIVE'}`);
+    }
+    
+    // Small delay to ensure the mode is properly set
+    setTimeout(() => {
+      navigate('/alerts?tab=rule-engine');
+    }, 5);
   };
 
   // Format date for display
@@ -277,6 +300,13 @@ const Dashboard: React.FC = () => {
     }
     return <Chip label={status} color="default" size="small" />;
   };
+
+  // Get active submissions for displaying in the dashboard
+  const getActiveSubmissions = useCallback(() => {
+    return submissions.length > 0 ? submissions : mockSubmissions;
+  }, [submissions]);
+
+  const activeSubmissions = getActiveSubmissions();
 
   return (
     <Box>
@@ -433,7 +463,7 @@ const Dashboard: React.FC = () => {
               Recent Submissions
             </Typography>
             
-            {submissions.length > 0 ? (
+            {activeSubmissions.length > 0 ? (
               <TableContainer>
                 <Table>
                   <TableHead>
@@ -446,7 +476,7 @@ const Dashboard: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {submissions.slice(0, 5).map((submission) => (
+                    {activeSubmissions.slice(0, 5).map((submission) => (
                       <TableRow 
                         key={submission.submissionId}
                         hover
@@ -469,7 +499,7 @@ const Dashboard: React.FC = () => {
               </Box>
             )}
             
-            {submissions.length > 5 && (
+            {activeSubmissions.length > 5 && (
               <Box display="flex" justifyContent="flex-end" mt={2}>
                 <Typography 
                   color="primary" 

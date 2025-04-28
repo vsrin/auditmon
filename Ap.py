@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import random
 from datetime import datetime, timedelta
@@ -8,6 +8,10 @@ import uuid
 app = Flask(__name__)
 # More permissive CORS configuration
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# NAICS restriction configuration - now stored in backend
+RESTRICTED_NAICS_CODES = ['6531', '7371', '3579']  # Default restricted codes
+NAICS_RULE_ENABLED = True  # Default rule state
 
 # Generate random dates within the past year
 def random_date(days_back=365):
@@ -29,7 +33,7 @@ def generate_insured():
     companies = [
         {
             "legal_name": "Acme Industries LLC",
-            "sic_code": "3579",
+            "sic_code": "3579",  # Now using a restricted NAICS code for demo
             "industry_description": "Manufacturing",
             "address": {
                 "line1": "123 Factory Lane",
@@ -42,7 +46,7 @@ def generate_insured():
         },
         {
             "legal_name": "TechSoft Solutions",
-            "sic_code": "7371",
+            "sic_code": "7371",  # Another restricted NAICS code
             "industry_description": "Technology",
             "address": {
                 "line1": "456 Innovation Drive",
@@ -68,7 +72,7 @@ def generate_insured():
         },
         {
             "legal_name": "GreenLeaf Properties",
-            "sic_code": "6531",
+            "sic_code": "6531",  # Another restricted NAICS code
             "industry_description": "Real Estate",
             "address": {
                 "line1": "101 Property Blvd",
@@ -132,29 +136,51 @@ def generate_documents():
     
     return docs
 
-def generate_compliance_checks():
-    checks = [
-        {
-            "check_type": "Risk Appetite",
-            "result": random.choice(["Pass", "Fail", "Warning"]),
-            "timestamp": random_date(5),
-            "details": "Industry classification review."
-        },
-        {
-            "check_type": "Financial Stability",
-            "result": random.choice(["Pass", "Fail", "Warning"]),
-            "timestamp": random_date(5),
-            "details": "Financial ratio analysis."
-        },
-        {
-            "check_type": "Document Completeness",
-            "result": random.choice(["Pass", "Fail", "Warning"]),
-            "timestamp": random_date(5),
-            "details": "Required documents check."
-        }
-    ]
+def evaluate_compliance(submission):
+    industry_code = submission.get("insured", {}).get("sic_code", "")
+    checks = []
+    overall_status = "Compliant"
+
+    # Document completeness check
+    checks.append({
+        "check_type": "Document Completeness",
+        "result": random.choice(["Pass", "Warning"]),
+        "timestamp": datetime.now().strftime('%Y-%m-%d'),
+        "details": "Required documents check."
+    })
     
-    return checks
+    # NAICS code restriction check - centralized business logic
+    if NAICS_RULE_ENABLED and industry_code in RESTRICTED_NAICS_CODES:
+        checks.append({
+            "check_type": "Risk Appetite",
+            "result": "Fail",
+            "timestamp": datetime.now().strftime('%Y-%m-%d'),
+            "details": f"Industry code {industry_code} is in the restricted list."
+        })
+        overall_status = "Non-Compliant"
+    else:
+        checks.append({
+            "check_type": "Risk Appetite",
+            "result": "Pass",
+            "timestamp": datetime.now().strftime('%Y-%m-%d'),
+            "details": "Industry classification within acceptable parameters."
+        })
+    
+    # Financial check  
+    financial_result = random.choice(["Pass", "Warning", "Fail"])
+    checks.append({
+        "check_type": "Financial Stability",
+        "result": financial_result,
+        "timestamp": datetime.now().strftime('%Y-%m-%d'),
+        "details": "Financial ratio analysis."
+    })
+    
+    if financial_result == "Fail" and overall_status != "Non-Compliant":
+        overall_status = "Non-Compliant"
+    elif financial_result == "Warning" and overall_status == "Compliant":
+        overall_status = "At Risk"
+        
+    return {"checks": checks, "overall_status": overall_status}
 
 # Endpoint to get a list of submissions
 @app.route('/api/submissions', methods=['GET'])
@@ -165,11 +191,15 @@ def get_submissions():
         broker = generate_broker()
         insured = generate_insured()
         
+        # Evaluate compliance to set status
+        evaluation = evaluate_compliance({"insured": insured})
+        status = evaluation["overall_status"]
+        
         submissions.append({
             "submission": submission,
             "broker": broker,
             "insured": insured,
-            "status": random.choice(["Compliant", "At Risk", "Non-Compliant"])
+            "status": status
         })
     
     return jsonify(submissions)
@@ -181,17 +211,87 @@ def get_submission_detail(submission_id):
     submission = generate_submission_data()
     submission["id"] = submission_id  # Use the requested ID
     
+    broker = generate_broker()
+    insured = generate_insured()
+    
+    # Evaluate compliance
+    evaluation = evaluate_compliance({"insured": insured})
+    
     detail = {
         "submission": submission,
-        "broker": generate_broker(),
-        "insured": generate_insured(),
+        "broker": broker,
+        "insured": insured,
         "risk_assessment": generate_risk_data(),
         "documents": generate_documents(),
-        "compliance_checks": generate_compliance_checks(),
-        "status": random.choice(["Compliant", "At Risk", "Non-Compliant"])
+        "compliance_checks": evaluation["checks"],
+        "status": evaluation["overall_status"]
     }
     
     return jsonify(detail)
+
+# NEW API: Get restricted NAICS codes
+@app.route('/api/restricted-naics', methods=['GET'])
+def get_restricted_naics():
+    return jsonify({
+        "restrictedCodes": RESTRICTED_NAICS_CODES,
+        "ruleEnabled": NAICS_RULE_ENABLED
+    })
+
+# NEW API: Update restricted NAICS codes
+@app.route('/api/restricted-naics', methods=['POST'])
+def update_restricted_naics():
+    global RESTRICTED_NAICS_CODES, NAICS_RULE_ENABLED
+    
+    data = request.json
+    if data.get('restrictedCodes') is not None:
+        RESTRICTED_NAICS_CODES = data['restrictedCodes']
+    
+    if data.get('ruleEnabled') is not None:
+        NAICS_RULE_ENABLED = data['ruleEnabled']
+    
+    return jsonify({
+        "success": True,
+        "restrictedCodes": RESTRICTED_NAICS_CODES,
+        "ruleEnabled": NAICS_RULE_ENABLED
+    })
+
+# NEW API: Evaluate compliance for a submission
+@app.route('/api/evaluate-compliance', methods=['POST'])
+def evaluate_submission_compliance():
+    submission = request.json.get('submission', {})
+    results = evaluate_compliance(submission)
+    
+    # Format response to match the frontend expectation
+    response = {
+        "submissionId": submission.get("id", ""),
+        "timestamp": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+        "checks": [],
+        "overallStatus": results["overall_status"]
+    }
+    
+    # Convert the compliance checks format
+    for check in results["checks"]:
+        formatted_check = {
+            "checkId": str(uuid.uuid4())[:8],
+            "category": check["check_type"],
+            "status": "compliant" if check["result"] == "Pass" else 
+                      "attention" if check["result"] == "Warning" else "non-compliant",
+            "findings": check["details"],
+            "timestamp": check["timestamp"],
+            "dataPoints": {}
+        }
+        
+        # Add data points for NAICS check
+        if check["check_type"] == "Risk Appetite":
+            formatted_check["dataPoints"] = {
+                "industryCode": submission.get("insured", {}).get("sic_code", ""),
+                "industryDescription": submission.get("insured", {}).get("industry_description", ""),
+                "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES) if check["result"] == "Fail" else ""
+            }
+        
+        response["checks"].append(formatted_check)
+    
+    return jsonify(response)
 
 if __name__ == '__main__':
     app.run(debug=True, port=8000, host='0.0.0.0')

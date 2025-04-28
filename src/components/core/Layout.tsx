@@ -1,5 +1,5 @@
 // src/components/core/Layout.tsx
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useState, useEffect } from 'react';
 import { 
   Box, 
   CssBaseline, 
@@ -22,11 +22,11 @@ import {
   Settings as SettingsIcon,
   Build as BuildIcon
 } from '@mui/icons-material';
-// Import useNavigate instead of RouterLink
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { Code as CodeIcon } from '@mui/icons-material';
+import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 
 const drawerWidth = 240;
 
@@ -81,13 +81,19 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const theme = useTheme();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const dispatch = useDispatch();
   const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
-  // Use navigate for programmatic navigation
   const navigate = useNavigate();
+
+  // FIXED: Sync the current mode with rule engine provider
+  useEffect(() => {
+    if (ruleEngineProvider.setDemoMode) {
+      console.log("Layout - Setting rule engine demo mode:", isDemoMode);
+      ruleEngineProvider.setDemoMode(isDemoMode);
+    }
+  }, [isDemoMode]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -209,12 +215,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             Intake - Audit Compliance Monitoring
           </Typography>
           
-          {/* Mode indicator chip instead of toggle */}
+          {/* FIXED: Mode indicator chip with more distinct styling */}
           <Chip
             label={isDemoMode ? 'Demo Mode' : 'Live Mode'}
             color={isDemoMode ? 'default' : 'primary'}
+            variant={isDemoMode ? 'outlined' : 'filled'}
             size="small"
-            sx={{ mr: 1 }}
+            sx={{ 
+              mr: 1,
+              bgcolor: isDemoMode ? 'rgba(0, 0, 0, 0.08)' : undefined,
+              fontWeight: 'bold',
+              border: isDemoMode ? '1px solid rgba(0, 0, 0, 0.23)' : undefined
+            }}
           />
           {!isDemoMode && (
             <Typography variant="caption" color="text.secondary" sx={{ mr: 2 }}>

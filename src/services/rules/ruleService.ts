@@ -24,7 +24,7 @@ const rules = [
     category: 'Risk Appetite',
     condition: (submission: SubmissionDetail) => {
       // Check for prohibited industry codes
-      const prohibitedCodes = ['6531', '7371', '3579']; // Example prohibited codes
+      const prohibitedCodes = ['6532', '7371', '3579']; // Example prohibited codes
       return !prohibitedCodes.includes(submission.insured.industry.code);
     },
     message: 'Industry is outside risk appetite guidelines',

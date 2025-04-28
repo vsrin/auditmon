@@ -32,9 +32,11 @@ import { RootState } from '../../store';
 import { 
   fetchSubmissionsStart, 
   fetchSubmissionsSuccess, 
-  fetchSubmissionsFailure 
+  fetchSubmissionsFailure,
+  clearSelectedSubmission
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
+import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 
 // Define type for sort direction
 type Order = 'asc' | 'desc';
@@ -73,26 +75,40 @@ const SubmissionList: React.FC = () => {
     { id: 'status', label: 'Status', sortable: true },
   ];
 
+  // FIXED: Ensure rule engine provider is synced with current mode
+  useEffect(() => {
+    if (ruleEngineProvider && typeof ruleEngineProvider.setDemoMode === 'function') {
+      console.log("SubmissionList - syncing rule engine mode:", isDemoMode);
+      ruleEngineProvider.setDemoMode(isDemoMode);
+    }
+  }, [isDemoMode]);
+
   // Parse query parameters for filters
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const statusParam = queryParams.get('status');
     
     if (statusParam) {
+      // Set the status filter based on URL parameter
       setStatusFilter(statusParam);
+      console.log(`Setting status filter to: ${statusParam} from URL`);
     } else {
       setStatusFilter('all');
     }
   }, [location.search]);
 
-  // Load submissions data (we've already loaded this in Dashboard, so we're only reloading if needed)
+  // Load submissions data
   useEffect(() => {
+    // Clear any previously selected submission to prevent context confusion
+    dispatch(clearSelectedSubmission());
+    
     // Only load if we don't already have submissions
-    if (submissions.length === 0) {
+    if (submissions.length === 0 || loading) {
       const loadSubmissions = async () => {
         dispatch(fetchSubmissionsStart());
         
         try {
+          console.log("Fetching submissions, isDemoMode:", isDemoMode);
           const data = await apiService.getSubmissions();
           dispatch(fetchSubmissionsSuccess(data));
         } catch (err) {
@@ -104,29 +120,32 @@ const SubmissionList: React.FC = () => {
       
       loadSubmissions();
     }
-  }, [dispatch, isDemoMode, submissions.length]);
+  }, [dispatch, isDemoMode, submissions.length, loading]);
 
   // Apply filters and sorting to submissions
   useEffect(() => {
+    console.log(`Applying filters: Status=${statusFilter}, Search=${searchTerm}`);
+    console.log(`Total submissions before filtering: ${submissions.length}`);
+    
     let result = [...submissions];
     
-    // Apply status filter
-    if (statusFilter !== 'all') {
+    // Apply status filter - Using exact match for status
+    if (statusFilter.toLowerCase() !== 'all') {
+      console.log(`Filtering by status: ${statusFilter}`);
+      
       result = result.filter(sub => {
-        const subStatus = sub.status.toLowerCase();
-        const filter = statusFilter.toLowerCase();
-        
-        // Handle special case for "At Risk" which might be stored as "Requires Attention"
-        if (filter === 'at risk') {
-          return subStatus === 'at risk' || subStatus.includes('attention');
-        }
-        
-        return subStatus.includes(filter.toLowerCase());
+        // Ensure status exists and match exactly
+        const subStatus = sub.status || '';
+        return subStatus === statusFilter;
       });
+      
+      console.log(`Submissions after status filter: ${result.length}`);
     }
     
     // Apply search term
     if (searchTerm) {
+      console.log(`Searching for: ${searchTerm}`);
+      
       const term = searchTerm.toLowerCase();
       result = result.filter(sub => 
         (sub.submissionId || '').toLowerCase().includes(term) ||
@@ -134,10 +153,13 @@ const SubmissionList: React.FC = () => {
         (sub.insured?.industry?.description || '').toLowerCase().includes(term) ||
         (sub.broker?.name || '').toLowerCase().includes(term)
       );
+      
+      console.log(`Submissions after search filter: ${result.length}`);
     }
     
     // Apply sorting
     result = stableSort(result, getComparator(order, orderBy));
+    console.log(`Final filtered submissions: ${result.length}`);
     
     setFilteredSubmissions(result);
   }, [submissions, statusFilter, searchTerm, order, orderBy]);
@@ -216,17 +238,24 @@ const SubmissionList: React.FC = () => {
     navigate('/submissions');
   };
 
-  // Handle row click - ensure navigation works correctly
+  // FIXED: Handle row click - ensure context is cleared before navigation
   const handleRowClick = (submissionId: string) => {
     if (!submissionId) {
       console.error('Invalid submission ID');
       return;
     }
     
+    // Clear any previously selected submission to ensure a fresh load
+    dispatch(clearSelectedSubmission());
+    
     try {
       // Use React Router to navigate
       console.log(`Navigating to submission ${submissionId}`);
-      navigate(`/submissions/${submissionId}`);
+      
+      // Force a small delay to ensure state is cleared before navigation
+      setTimeout(() => {
+        navigate(`/submissions/${submissionId}`);
+      }, 10);
     } catch (error) {
       console.error('Navigation error:', error);
       
@@ -321,12 +350,15 @@ const SubmissionList: React.FC = () => {
                 label="Status"
                 value={statusFilter}
                 onChange={(e) => {
-                  setStatusFilter(e.target.value);
+                  const newStatus = e.target.value;
+                  setStatusFilter(newStatus);
+                  console.log(`Status filter changed to: ${newStatus}`);
+                  
                   // Update URL with status filter
-                  if (e.target.value === 'all') {
+                  if (newStatus === 'all') {
                     navigate('/submissions');
                   } else {
-                    navigate(`/submissions?status=${e.target.value}`);
+                    navigate(`/submissions?status=${newStatus}`);
                   }
                 }}
                 variant="outlined"

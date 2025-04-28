@@ -10,8 +10,9 @@ import RuleService from './ruleService';
 class RuleEngineProvider {
   private useRemoteEngine: boolean = false;
   private ruleEngineApiUrl: string = '';
+  private currentDemoMode: boolean = true; // Default to demo mode
   
-  // Cache for NAICS code restriction rule
+  // Cache for restricted NAICS codes
   private restrictedNaicsCodes: string[] = ['6531', '7371', '3579']; // Default restricted codes
   private naicsRuleEnabled: boolean = true;
 
@@ -29,6 +30,26 @@ class RuleEngineProvider {
     this.useRemoteEngine = useRemote;
     this.ruleEngineApiUrl = apiUrl;
     console.log(`Rule engine configured: useRemote=${useRemote}, apiUrl=${apiUrl}`);
+  }
+
+  /**
+   * Set the current demo mode
+   * @param isDemoMode Whether the application is in demo mode
+   */
+  setDemoMode(isDemoMode: boolean): void {
+    const wasChanged = this.currentDemoMode !== isDemoMode;
+    this.currentDemoMode = isDemoMode;
+    if (wasChanged) {
+      console.log(`Rule engine demo mode set to: ${isDemoMode ? 'DEMO' : 'LIVE'}`);
+    }
+  }
+
+  /**
+   * Get the current demo mode
+   * @returns Whether the application is in demo mode
+   */
+  isDemoMode(): boolean {
+    return this.currentDemoMode;
   }
 
   /**
@@ -74,7 +95,9 @@ class RuleEngineProvider {
     checks: any[];
     overallStatus: string;
   }> {
-    if (this.useRemoteEngine) {
+    console.log(`Rule engine evaluating submission: ${submission.submissionId}, Mode: ${this.currentDemoMode ? 'DEMO' : 'LIVE'}`);
+    
+    if (this.useRemoteEngine && !this.currentDemoMode) {
       console.log('Using remote rule engine for evaluation');
       return this.callRemoteRuleEngine(submission);
     } else {
@@ -163,7 +186,7 @@ class RuleEngineProvider {
       console.error('Error calling remote rule engine:', error);
       // Fallback to local rule engine if remote fails
       console.log('Falling back to local rule engine');
-      const localEvaluation = RuleService.evaluateSubmissionLocal(submission);
+      const localEvaluation = await RuleService.evaluateSubmissionLocal(submission);
       
       // Apply NAICS rule to local evaluation if enabled
       if (this.naicsRuleEnabled) {
@@ -171,6 +194,21 @@ class RuleEngineProvider {
       }
       
       return localEvaluation;
+    }
+  }
+
+  /**
+   * Fetch restricted codes from backend
+   */
+  async fetchRestrictedCodesFromBackend(): Promise<void> {
+    try {
+      console.log('Fetching restricted NAICS codes from backend');
+      // This would be implemented to connect to your backend API
+      // For now, we'll just use the default codes
+      return Promise.resolve();
+    } catch (error) {
+      console.error('Error fetching restricted codes:', error);
+      return Promise.resolve();
     }
   }
 }

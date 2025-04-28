@@ -43,21 +43,30 @@ const AuditAlerts: React.FC<AuditAlertsProps> = ({
   onViewAllClick 
 }) => {
   const { submissions } = useSelector((state: RootState) => state.submissions);
+  const { isDemoMode } = useSelector((state: RootState) => state.config);
   const [alerts, setAlerts] = useState<AlertItem[]>(initialAlerts);
   
   // Count submissions by status to update alerts dynamically
   useEffect(() => {
     if (!submissions || submissions.length === 0) return;
     
+    // FIXED: Store and preserve the isDemoMode setting
+    console.log("AuditAlerts - Current mode:", isDemoMode ? "DEMO" : "LIVE");
+    
     // Get current restricted NAICS codes - use empty array if the method doesn't exist
     const restrictedNaicsCodes = ruleEngineProvider.getRestrictedNaicsCodes?.() || [];
     const isNaicsRuleActive = ruleEngineProvider.isNaicsRuleEnabled?.() !== false;
+    
+    console.log("Restricted NAICS codes:", restrictedNaicsCodes);
+    console.log("NAICS rule active:", isNaicsRuleActive);
     
     // Count submissions with restricted NAICS codes
     const restrictedNaicsCount = isNaicsRuleActive ? submissions.filter(sub => {
       const industryCode = sub.insured?.industry?.code || '';
       return restrictedNaicsCodes.includes(industryCode);
     }).length : 0;
+    
+    console.log("Submissions with restricted NAICS:", restrictedNaicsCount);
     
     // Create updated alerts array
     const updatedAlerts: AlertItem[] = [...initialAlerts];
@@ -101,12 +110,12 @@ const AuditAlerts: React.FC<AuditAlertsProps> = ({
     }
     
     setAlerts(updatedAlerts);
-  }, [submissions, initialAlerts]);
+  }, [submissions, initialAlerts, isDemoMode]);
 
   return (
     <Paper sx={{ p: 2, height: '100%' }}>
       <Typography variant="h5" gutterBottom>
-        Audit Alerts
+        Audit Alerts {isDemoMode && "(Demo Mode)"}
       </Typography>
       
       <Box sx={{ my: 2 }}>

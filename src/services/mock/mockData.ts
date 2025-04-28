@@ -15,11 +15,6 @@ const randomRecentDate = () => {
   return pastDate.toISOString();
 };
 
-// Generate random submission ID
-const generateSubmissionId = () => {
-  return `SUB${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-};
-
 // Sample industry data for creating varied submissions
 const industries = [
   { code: '332999', description: 'All Other Miscellaneous Fabricated Metal Product Manufacturing' },
