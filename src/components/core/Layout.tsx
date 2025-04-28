@@ -23,7 +23,7 @@ import {
   Build as BuildIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux'; // Removed unused dispatch
 import { RootState } from '../../store';
 import { Code as CodeIcon } from '@mui/icons-material';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
@@ -81,9 +81,9 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const theme = useTheme();
+  // Use the isMobile variable to conditionally render components if needed
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const dispatch = useDispatch();
   const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
   const navigate = useNavigate();
 

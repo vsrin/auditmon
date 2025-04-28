@@ -44,7 +44,7 @@ const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ compact = false }) => {
   // Log current mode on component mount
   useEffect(() => {
     console.log("ModeSwitcher initialized - Current mode:", isDemoMode ? "DEMO" : "LIVE");
-  }, []);
+  }, [isDemoMode]); // Fixed: Added missing dependency
 
   const handleModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newDemoMode = event.target.checked;
