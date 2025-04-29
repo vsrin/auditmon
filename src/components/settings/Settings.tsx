@@ -54,7 +54,7 @@ const Settings: React.FC = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('success');
   
   // State for API and Rule Engine testing
-  const [apiEndpointInput, setApiEndpointInput] = useState(config.apiEndpoint || 'http://localhost:8000');
+  const [apiEndpointInput, setApiEndpointInput] = useState(config.apiEndpoint || 'http://localhost:8000/api');
   const [ruleEngineUrlInput, setRuleEngineUrlInput] = useState(config.ruleEngineApiUrl || 'http://localhost:3001/api');
   const [testingApi, setTestingApi] = useState(false);
   const [testingRuleEngine, setTestingRuleEngine] = useState(false);
@@ -143,8 +143,13 @@ const Settings: React.FC = () => {
     setTestingApi(true);
     
     try {
-      // Test against the correct endpoint with the /api/ prefix
-      const testUrl = `${apiEndpointInput}/api/submissions`;
+      // Get base endpoint without /api if it ends with it
+      const baseEndpoint = apiEndpointInput.endsWith('/api') 
+        ? apiEndpointInput 
+        : `${apiEndpointInput}`;
+      
+      // Test against the correct endpoint with the /submissions path
+      const testUrl = `${baseEndpoint}/submissions`;
       console.log(`Testing API connection to: ${testUrl}`);
       
       const response = await axios.get(testUrl, {
@@ -154,17 +159,17 @@ const Settings: React.FC = () => {
       if (response.status === 200 && Array.isArray(response.data)) {
         const submissionsCount = response.data.length;
         
-        // If the test was successful, make sure we store the full API path that includes /api
-        const fullApiPath = apiEndpointInput.endsWith('/api') 
-          ? apiEndpointInput 
-          : `${apiEndpointInput}/api`;
+        // Make sure the endpoint ends with /api
+        const normalizedEndpoint = baseEndpoint.endsWith('/api') 
+          ? baseEndpoint 
+          : `${baseEndpoint}/api`;
           
-        setApiEndpointInput(fullApiPath);
+        setApiEndpointInput(normalizedEndpoint);
         
         setApiTestStatus({
           tested: true,
           success: true,
-          message: `Successfully connected to API server at ${fullApiPath}. Retrieved ${submissionsCount} submissions from endpoint /submissions.`
+          message: `Successfully connected to API server at ${normalizedEndpoint}. Retrieved ${submissionsCount} submissions from endpoint /submissions.`
         });
         setSnackbarMessage(`API connection successful: Retrieved ${submissionsCount} submissions from the server.`);
         setSnackbarSeverity('success');
@@ -322,24 +327,7 @@ const Settings: React.FC = () => {
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   Toggle between Demo mode (using synthetic data) and Live mode (connecting to the API).
                 </Typography>
-                
                 <ModeSwitcher />
-                
-                {!canSaveSettings() && !config.isDemoMode && (
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    <Typography variant="body2">
-                      <strong>Warning:</strong> API connection tests must pass to use Live mode. 
-                      If tests fail, settings cannot be saved and you will remain in Demo mode.
-                    </Typography>
-                  </Alert>
-                )}
-                
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  <Typography variant="body2">
-                    When in Demo mode, the application uses synthetic data for demonstration purposes.
-                    When in Live mode, the application connects to the configured API endpoint.
-                  </Typography>
-                </Alert>
               </CardContent>
             </Card>
           </Box>
@@ -360,8 +348,8 @@ const Settings: React.FC = () => {
                     onChange={handleApiEndpointChange}
                     fullWidth
                     margin="normal"
-                    placeholder="http://localhost:8000"
-                    helperText="Example: http://localhost:8000"
+                    placeholder="http://localhost:8000/api"
+                    helperText="Example: http://localhost:8000/api"
                     sx={{ mr: 2 }}
                   />
                   <Button 

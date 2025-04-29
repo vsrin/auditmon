@@ -2,6 +2,23 @@ insurance-monitoring-dashboard/
   Ap.py
   README.md
   app-context.md
+  build/
+    _redirects
+    asset-manifest.json
+    favicon.ico
+    index.html
+    logo192.png
+    logo512.png
+    manifest.json
+    robots.txt
+    static/
+      css/
+        main.e6c13ad2.css
+        main.e6c13ad2.css.map
+      js/
+        main.b9868c28.js
+        main.b9868c28.js.LICENSE.txt
+        main.b9868c28.js.map
   netlify.toml
   package-lock.json
   package.json
@@ -18,6 +35,8 @@ insurance-monitoring-dashboard/
     App.css
     App.tsx
     components/
+      alerts/
+        Alerts.tsx
       analytics/
       compliance/
       config/
@@ -28,6 +47,7 @@ insurance-monitoring-dashboard/
         Layout.tsx
         ModeSwitcher.tsx
       dashboard/
+        AuditAlerts.tsx
         Dashboard.tsx
       documents/
       reports/
@@ -40,6 +60,8 @@ insurance-monitoring-dashboard/
       submissions/
         SubmissionDetail.tsx
         SubmissionList.tsx
+    hooks/
+      useModeSwitching.ts
     index.css
     index.tsx
     logo.svg
@@ -53,10 +75,15 @@ insurance-monitoring-dashboard/
     services/
       api/
         apiService.ts
+      appStateService.ts
       auth/
       config/
+      data/
+        dataProvider.ts
       mock/
         mockData.ts
+      rules/
+        ruleService.ts
     setupTests.ts
     store/
       epics/

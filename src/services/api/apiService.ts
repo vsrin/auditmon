@@ -47,6 +47,32 @@ class ApiService {
   }
   
   /**
+   * Get a nested value from an object using a path string (e.g. "a.b.c")
+   * @param obj The object to search
+   * @param path The dot-separated path to the property
+   * @param defaultValue Default value if path doesn't exist
+   * @returns The value at the path or the default value
+   */
+  private getNestedValue(obj: any, path: string, defaultValue: any = undefined): any {
+    if (!obj || !path) return defaultValue;
+    
+    // Handle array notation like "array[0].property"
+    const normalizePath = (p: string): string[] => {
+      return p.replace(/\[(\d+)\]/g, '.$1').split('.');
+    };
+    
+    const keys = normalizePath(path);
+    let result = obj;
+    
+    for (const key of keys) {
+      if (result === null || result === undefined) return defaultValue;
+      result = result[key];
+    }
+    
+    return result !== undefined ? result : defaultValue;
+  }
+  
+  /**
    * Get all submissions
    * @returns Promise with submissions data
    */
@@ -64,7 +90,12 @@ class ApiService {
       const response = await axios.get(endpoint);
       console.log(`ApiService.getSubmissions - Received ${response.data.length} submissions from API`);
       
-      // Ensure the response data matches our expected format
+      // Log the first item to help with debugging
+      if (response.data.length > 0) {
+        console.log('First item structure:', JSON.stringify(response.data[0]).slice(0, 500) + '...');
+      }
+      
+      // Ensure the response data matches our expected format by mapping each item
       return response.data.map((item: any) => this.mapSubmissionResponse(item));
     } catch (error) {
       console.error('ApiService.getSubmissions - Error:', error);
@@ -169,13 +200,36 @@ class ApiService {
       return data as Submission;
     }
     
-    // Otherwise map from the API format
+    // Map using the nested path resolution for external API data
+    const submissionId = this.getNestedValue(data, 'tx_id', '') || 
+                         `SUB-${Math.floor(Math.random() * 90000) + 10000}`;
+                         
+    const timestamp = this.getNestedValue(data, 'created_on', new Date().toISOString());
+    
+    // Create the mapped submission object with proper nested structure
     return {
-      submissionId: data.id || `SUB-${Math.floor(Math.random() * 90000) + 10000}`,
-      insured: data.insured,
-      broker: data.broker,
-      timestamp: data.timestamp || data.created_at || new Date().toISOString(),
-      status: data.status
+      submissionId,
+      timestamp,
+      status: this.getNestedValue(data, 'status', 'Unknown'),
+      broker: {
+        name: this.getNestedValue(data, 'bp_parsed_response.Common.Broker Details.broker_name.value', 'Unknown'),
+        email: this.getNestedValue(data, 'bp_parsed_response.Common.Broker Details.broker_email.value', 'Unknown')
+      },
+      insured: {
+        name: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.company_name.value', 'Unknown'),
+        industry: {
+          code: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.primary_naics_2017[0].code', 'Unknown'),
+          description: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.primary_naics_2017[0].desc', 'Unknown')
+        },
+        address: {
+          street: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.address_1.value', ''),
+          city: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.city.value', ''),
+          state: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.state.value', ''),
+          zip: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.postal_code.value', '')
+        },
+        yearsInBusiness: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.years_in_business.value', ''),
+        employeeCount: this.getNestedValue(data, 'bp_parsed_response.Common.Firmographics.total_full_time_employees.value', '')
+      }
     };
   }
   
@@ -190,16 +244,31 @@ class ApiService {
       return data as SubmissionDetail;
     }
     
-    // Otherwise map from the API format
+    // First map the base submission data
+    const baseSubmission = this.mapSubmissionResponse(data);
+    
+    // Get lines of coverage as an array
+    let coverageLines: string[] = [];
+    const normalizedCoverage = this.getNestedValue(data, 'bp_parsed_response.Common.Limits and Coverages.normalized_coverage', null);
+    
+    if (normalizedCoverage) {
+      if (Array.isArray(normalizedCoverage)) {
+        coverageLines = normalizedCoverage;
+      } else if (typeof normalizedCoverage === 'string') {
+        coverageLines = [normalizedCoverage];
+      }
+    }
+    
+    // Add the additional detail fields
     return {
-      submissionId: data.submissionId || data.id || `SUB-${Math.floor(Math.random() * 90000) + 10000}`,
-      insured: data.insured,
-      broker: data.broker,
-      timestamp: data.timestamp || data.created_at || new Date().toISOString(),
-      status: data.status,
-      coverage: data.coverage,
-      documents: data.documents,
-      complianceChecks: data.complianceChecks || []
+      ...baseSubmission,
+      coverage: {
+        lines: coverageLines,
+        effectiveDate: this.getNestedValue(data, 'bp_parsed_response.Common.Product Details.policy_inception_date.value', ''),
+        expirationDate: this.getNestedValue(data, 'bp_parsed_response.Common.Product Details.end_date.value', '')
+      },
+      documents: data.documents || [], // Use documents if available or empty array
+      complianceChecks: data.complianceChecks || [] // Use compliance checks if available or empty array
     };
   }
 }

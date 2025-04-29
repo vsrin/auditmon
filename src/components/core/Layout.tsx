@@ -20,7 +20,8 @@ import {
   Description as DescriptionIcon,
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
-  Build as BuildIcon
+  Build as BuildIcon,
+  BugReport as BugReportIcon // Added for debug icon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux'; // Removed unused dispatch
@@ -170,6 +171,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <SettingsIcon fontSize="small" />
           </Box>
           <Typography>Settings</Typography>
+        </SidebarItem>
+        
+        {/* Added new API Debug navigation item */}
+        <SidebarItem
+          onClick={() => navigateTo('/api-debug')}
+        >
+          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
+            <BugReportIcon fontSize="small" />
+          </Box>
+          <Typography>API Debug</Typography>
         </SidebarItem>
       </Box>
       

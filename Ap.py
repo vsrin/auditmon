@@ -4,6 +4,10 @@ from flask_cors import CORS
 import random
 from datetime import datetime, timedelta
 import uuid
+import json
+
+#Import from Megan
+from pymongo import MongoClient
 
 app = Flask(__name__)
 # More permissive CORS configuration
@@ -13,285 +17,260 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 RESTRICTED_NAICS_CODES = ['6531', '7371', '3579']  # Default restricted codes
 NAICS_RULE_ENABLED = True  # Default rule state
 
+# Custom JSON encoder to handle datetime objects
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+# Set the custom JSON encoder for Flask
+app.json_encoder = CustomJSONEncoder
+
 # Generate random dates within the past year
 def random_date(days_back=365):
     today = datetime.now()
     random_days = random.randint(1, days_back)
     return (today - timedelta(days=random_days)).strftime('%Y-%m-%d')
 
-# Sample data generation functions
-def generate_broker():
-    brokers = [
-        {"company_name": "ABC Insurance Brokers", "email_address": "contact@abcbrokers.com"},
-        {"company_name": "Global Risk Partners", "email_address": "info@grpartners.com"},
-        {"company_name": "Shield Insurance Services", "email_address": "support@shieldinsurance.com"},
-        {"company_name": "Elite Coverage Group", "email_address": "inquiries@elitecoverage.com"}
-    ]
-    return random.choice(brokers)
+# Helper function to get nested values safely
+def get_nested_value(obj, path, default=None):
+    """Get a nested value from a dictionary using a dot-separated path."""
+    if not obj or not path:
+        return default
+    
+    # Handle array notation like "array[0].property"
+    parts = path.replace('[', '.').replace(']', '').split('.')
+    current = obj
+    
+    for part in parts:
+        if not part:  # Skip empty parts
+            continue
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
+        else:
+            return default
+    
+    return current if current is not None else default
 
-def generate_insured():
-    companies = [
-        {
-            "legal_name": "Acme Industries LLC",
-            "sic_code": "3579",  # Now using a restricted NAICS code for demo
-            "industry_description": "Manufacturing",
-            "address": {
-                "line1": "123 Factory Lane",
-                "city": "Boston",
-                "state": "MA",
-                "postal_code": "02108"
-            },
-            "years_in_business": random.randint(1, 30),
-            "employee_count": random.randint(10, 500)
-        },
-        {
-            "legal_name": "TechSoft Solutions",
-            "sic_code": "7371",  # Another restricted NAICS code
-            "industry_description": "Technology",
-            "address": {
-                "line1": "456 Innovation Drive",
-                "city": "San Francisco",
-                "state": "CA",
-                "postal_code": "94103"
-            },
-            "years_in_business": random.randint(1, 15),
-            "employee_count": random.randint(5, 200)
-        },
-        {
-            "legal_name": "Omega Retail Group",
-            "sic_code": "5311",
-            "industry_description": "Retail",
-            "address": {
-                "line1": "789 Shopping Plaza",
-                "city": "Chicago",
-                "state": "IL",
-                "postal_code": "60601"
-            },
-            "years_in_business": random.randint(1, 25),
-            "employee_count": random.randint(20, 1000)
-        },
-        {
-            "legal_name": "GreenLeaf Properties",
-            "sic_code": "6531",  # Another restricted NAICS code
-            "industry_description": "Real Estate",
-            "address": {
-                "line1": "101 Property Blvd",
-                "city": "Miami",
-                "state": "FL",
-                "postal_code": "33101"
-            },
-            "years_in_business": random.randint(1, 20),
-            "employee_count": random.randint(5, 100)
-        }
-    ]
-    return random.choice(companies)
-
-def generate_submission_data():
-    created_at = random_date(30)  # Within the last month
-    effective_date = (datetime.now() + timedelta(days=random.randint(30, 90))).strftime('%Y-%m-%d')
-    expiration_date = (datetime.now() + timedelta(days=random.randint(395, 400))).strftime('%Y-%m-%d')
-    
-    coverage_lines = random.sample(
-        ["General Liability", "Property", "Workers Compensation", "Professional Liability", "Cyber"], 
-        k=random.randint(1, 3)
-    )
-    
-    return {
-        "id": f"SUB-{random.randint(10000, 99999)}",
-        "created_at": created_at,
-        "effective_date": effective_date,
-        "expiration_date": expiration_date,
-        "coverage_lines": coverage_lines,
-        "status": random.choice(["New", "In Review", "Quoted", "Bound"])
-    }
-
-def generate_risk_data():
-    risk_factors = [
-        {"type": "Financial", "score": random.randint(1, 100)},
-        {"type": "Operational", "score": random.randint(1, 100)},
-        {"type": "Hazard", "score": random.randint(1, 100)},
-        {"type": "Strategic", "score": random.randint(1, 100)}
-    ]
-    
-    return {
-        "overall_score": random.randint(1, 100),
-        "factors": risk_factors,
-        "notes": "Sample risk assessment notes."
-    }
-
-def generate_documents():
-    doc_types = ["Application", "Loss Runs", "Statement of Values", "Financial Statement", "Risk Assessment"]
-    docs = []
-    
-    for i in range(random.randint(2, 5)):
-        doc_type = random.choice(doc_types)
-        docs.append({
-            "id": str(uuid.uuid4())[:8],
-            "name": f"{doc_type} - {datetime.now().strftime('%Y%m%d')}",
-            "type": doc_type,
-            "status": random.choice(["Processed", "Pending", "Failed"]),
-            "size": random.randint(100, 5000)
-        })
-    
-    return docs
-
-def evaluate_compliance(submission):
-    industry_code = submission.get("insured", {}).get("sic_code", "")
-    checks = []
-    overall_status = "Compliant"
-
-    # Document completeness check
-    checks.append({
-        "check_type": "Document Completeness",
-        "result": random.choice(["Pass", "Warning"]),
-        "timestamp": datetime.now().strftime('%Y-%m-%d'),
-        "details": "Required documents check."
-    })
-    
-    # NAICS code restriction check - centralized business logic
-    if NAICS_RULE_ENABLED and industry_code in RESTRICTED_NAICS_CODES:
-        checks.append({
-            "check_type": "Risk Appetite",
-            "result": "Fail",
-            "timestamp": datetime.now().strftime('%Y-%m-%d'),
-            "details": f"Industry code {industry_code} is in the restricted list."
-        })
-        overall_status = "Non-Compliant"
-    else:
-        checks.append({
-            "check_type": "Risk Appetite",
-            "result": "Pass",
-            "timestamp": datetime.now().strftime('%Y-%m-%d'),
-            "details": "Industry classification within acceptable parameters."
-        })
-    
-    # Financial check  
-    financial_result = random.choice(["Pass", "Warning", "Fail"])
-    checks.append({
-        "check_type": "Financial Stability",
-        "result": financial_result,
-        "timestamp": datetime.now().strftime('%Y-%m-%d'),
-        "details": "Financial ratio analysis."
-    })
-    
-    if financial_result == "Fail" and overall_status != "Non-Compliant":
-        overall_status = "Non-Compliant"
-    elif financial_result == "Warning" and overall_status == "Compliant":
-        overall_status = "At Risk"
-        
-    return {"checks": checks, "overall_status": overall_status}
-
-# Endpoint to get a list of submissions - MODIFIED to match dashboard expectations
+# Megan Code - updated to map data properly
 @app.route('/api/submissions', methods=['GET'])
 def get_submissions():
-    submissions = []
-    for _ in range(10):
-        submission_data = generate_submission_data()
-        broker = generate_broker()
-        insured = generate_insured()
+    try:
+        # MongoDB connection setup
+        client = MongoClient('mongodb+srv://artifi:root@artifi.2vi2m.mongodb.net/?retryWrites=true&w=majority&appName=Artifi')
+        db = client['Submission_Intake']  # Replace with your database name
+        submissions_collection = db['BP_service']  # Replace with your collection name
         
-        # Evaluate compliance to set status
-        evaluation = evaluate_compliance({"insured": insured})
-        status = evaluation["overall_status"]
+        # Find documents that have the 'bp_parsed_response' key
+        query = {'bp_parsed_response': {'$exists': True}}
+        raw_submissions = list(submissions_collection.find(query, {'_id': 0}))
         
-        # Flattened structure that matches dashboard expectations
-        submissions.append({
-            "submissionId": submission_data["id"],
-            "insured": {
-                "name": insured["legal_name"],
-                "industry": {
-                    "code": insured["sic_code"],
-                    "description": insured["industry_description"]
+        print(f"Found {len(raw_submissions)} submissions from MongoDB")
+        
+        # Map the raw submission data to the expected format
+        formatted_submissions = []
+        for sub in raw_submissions:
+            # Convert any datetime objects to strings
+            if isinstance(sub.get('created_on'), datetime):
+                sub['created_on'] = sub['created_on'].isoformat()
+            
+            # Map each submission using the defined mapping
+            formatted_sub = {
+                "submissionId": sub.get("tx_id", f"SUB-{random.randint(10000, 99999)}"),
+                "timestamp": sub.get("created_on", datetime.now().isoformat()),
+                "status": sub.get("status", "New"),
+                "broker": {
+                    "name": get_nested_value(sub, 'bp_parsed_response.Common.Broker Details.broker_name.value', 'Unknown'),
+                    "email": get_nested_value(sub, 'bp_parsed_response.Common.Broker Details.broker_email.value', 'Unknown')
                 },
-                "address": {
-                    "street": insured["address"]["line1"],
-                    "city": insured["address"]["city"],
-                    "state": insured["address"]["state"],
-                    "zip": insured["address"]["postal_code"]
-                },
-                "yearsInBusiness": insured["years_in_business"],
-                "employeeCount": insured["employee_count"]
-            },
-            "broker": {
-                "name": broker["company_name"],
-                "email": broker["email_address"]
-            },
-            "timestamp": submission_data["created_at"],
-            "status": status
-        })
+                "insured": {
+                    "name": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.company_name.value', 'Unknown'),
+                    "industry": {
+                        "code": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.code', 'Unknown'),
+                        "description": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.desc', 'Unknown')
+                    },
+                    "address": {
+                        "street": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.address_1.value', ''),
+                        "city": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.city.value', ''),
+                        "state": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.state.value', ''),
+                        "zip": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.postal_code.value', '')
+                    },
+                    "yearsInBusiness": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.years_in_business.value', ''),
+                    "employeeCount": get_nested_value(sub, 'bp_parsed_response.Common.Firmographics.total_full_time_employees.value', '')
+                }
+            }
+            formatted_submissions.append(formatted_sub)
+        
+        # Close the MongoDB connection
+        client.close()
+        
+        # Log the first item for debugging (safely convert to JSON string)
+        if formatted_submissions:
+            try:
+                sample_json = json.dumps(formatted_submissions[0], cls=CustomJSONEncoder)
+                print(f"First submission (truncated): {sample_json[:500]}...")
+            except Exception as e:
+                print(f"Error logging first submission: {str(e)}")
+        
+        # Return the formatted submissions
+        return jsonify(formatted_submissions)
     
-    return jsonify(submissions)
+    except Exception as e:
+        print(f"Error in get_submissions: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-# Endpoint to get details for a specific submission - MODIFIED to match dashboard expectations
+# Endpoint to get details for a specific submission
 @app.route('/api/submissions/<submission_id>', methods=['GET'])
 def get_submission_detail(submission_id):
-    # For demo purposes, we'll generate random data but use the requested ID
-    submission_data = generate_submission_data()
-    broker = generate_broker()
-    insured = generate_insured()
-    
-    # Evaluate compliance
-    evaluation = evaluate_compliance({"insured": insured})
-    
-    # Fetch documents and format compliance checks
-    documents = generate_documents()
-    formatted_checks = []
-    
-    for check in evaluation["checks"]:
-        formatted_check = {
-            "checkId": str(uuid.uuid4())[:8],
-            "category": check["check_type"],
-            "status": "compliant" if check["result"] == "Pass" else 
-                      "attention" if check["result"] == "Warning" else "non-compliant",
-            "findings": check["details"],
-            "timestamp": check["timestamp"],
-            "dataPoints": {}
+    try:
+        # MongoDB connection setup
+        client = MongoClient('mongodb+srv://artifi:root@artifi.2vi2m.mongodb.net/?retryWrites=true&w=majority&appName=Artifi')
+        db = client['Submission_Intake']
+        submissions_collection = db['BP_service']
+        
+        # Try to find the submission by ID
+        query = {'tx_id': submission_id, 'bp_parsed_response': {'$exists': True}}
+        submission = submissions_collection.find_one(query, {'_id': 0})
+        
+        if not submission:
+            # If not found by tx_id, try a more generic search
+            query = {'bp_parsed_response': {'$exists': True}}
+            all_submissions = list(submissions_collection.find(query, {'_id': 0}))
+            
+            # Find the submission with matching ID or return the first one
+            submission = next((s for s in all_submissions if get_nested_value(s, 'tx_id') == submission_id), 
+                             all_submissions[0] if all_submissions else None)
+        
+        client.close()
+        
+        if not submission:
+            return jsonify({"error": f"Submission with ID {submission_id} not found"}), 404
+        
+        # Convert any datetime objects to strings
+        if isinstance(submission.get('created_on'), datetime):
+            submission['created_on'] = submission['created_on'].isoformat()
+        
+        # Map the submission to the expected format
+        formatted_submission = {
+            "submissionId": submission.get("tx_id", submission_id),
+            "timestamp": submission.get("created_on", datetime.now().isoformat()),
+            "status": submission.get("status", "New"),
+            "broker": {
+                "name": get_nested_value(submission, 'bp_parsed_response.Common.Broker Details.broker_name.value', 'Unknown'),
+                "email": get_nested_value(submission, 'bp_parsed_response.Common.Broker Details.broker_email.value', 'Unknown')
+            },
+            "insured": {
+                "name": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.company_name.value', 'Unknown'),
+                "industry": {
+                    "code": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.code', 'Unknown'),
+                    "description": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.desc', 'Unknown')
+                },
+                "address": {
+                    "street": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.address_1.value', ''),
+                    "city": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.city.value', ''),
+                    "state": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.state.value', ''),
+                    "zip": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.postal_code.value', '')
+                },
+                "yearsInBusiness": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.years_in_business.value', ''),
+                "employeeCount": get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.total_full_time_employees.value', '')
+            }
         }
         
-        # Add data points for NAICS check
-        if check["check_type"] == "Risk Appetite":
-            formatted_check["dataPoints"] = {
-                "industryCode": insured["sic_code"],
-                "industryDescription": insured["industry_description"],
-                "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES) if check["result"] == "Fail" else ""
-            }
+        # Add additional detail fields needed for the detail view
+        coverage_lines = get_nested_value(submission, 'bp_parsed_response.Common.Limits and Coverages.normalized_coverage', [])
+        if isinstance(coverage_lines, str):
+            coverage_lines = [coverage_lines]
+        elif not isinstance(coverage_lines, list):
+            coverage_lines = []
+            
+        formatted_submission['coverage'] = {
+            'lines': coverage_lines,
+            'effectiveDate': get_nested_value(submission, 'bp_parsed_response.Common.Product Details.policy_inception_date.value', ''),
+            'expirationDate': get_nested_value(submission, 'bp_parsed_response.Common.Product Details.end_date.value', '')
+        }
         
-        formatted_checks.append(formatted_check)
-    
-    # Create a detailed response that matches what the dashboard expects
-    detail = {
-        "submissionId": submission_id,  # Use the requested ID
-        "insured": {
-            "name": insured["legal_name"],
-            "industry": {
-                "code": insured["sic_code"],
-                "description": insured["industry_description"]
+        # Add empty documents and compliance checks (to be filled later)
+        formatted_submission['documents'] = []
+        formatted_submission['complianceChecks'] = []
+        
+        # Generate some mock documents for display purposes
+        formatted_submission['documents'] = [
+            {
+                'id': f'doc-{uuid.uuid4()}',
+                'name': 'Application Form',
+                'type': 'Application',
+                'status': 'processed',
+                'size': random.randint(100000, 1000000)
             },
-            "address": {
-                "street": insured["address"]["line1"],
-                "city": insured["address"]["city"],
-                "state": insured["address"]["state"],
-                "zip": insured["address"]["postal_code"]
+            {
+                'id': f'doc-{uuid.uuid4()}',
+                'name': 'Loss Runs',
+                'type': 'Claims History',
+                'status': 'pending',
+                'size': random.randint(50000, 500000)
+            }
+        ]
+        
+        # Generate compliance checks
+        naics_code = get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.code', '')
+        
+        compliance_status = 'compliant'
+        if naics_code in RESTRICTED_NAICS_CODES:
+            compliance_status = 'non-compliant'
+        
+        formatted_submission['complianceChecks'] = [
+            {
+                'checkId': f'check-{uuid.uuid4().hex[:8]}',
+                'category': 'Risk Appetite',
+                'status': compliance_status,
+                'findings': (f"Industry code {naics_code} is in the restricted list." 
+                            if compliance_status == 'non-compliant'
+                            else "Industry is within acceptable parameters."),
+                'timestamp': datetime.now().isoformat(),
+                'dataPoints': {
+                    'industryCode': naics_code,
+                    'industryDescription': get_nested_value(submission, 'bp_parsed_response.Common.Firmographics.primary_naics_2017.0.desc', 'Unknown')
+                }
             },
-            "yearsInBusiness": insured["years_in_business"],
-            "employeeCount": insured["employee_count"]
-        },
-        "broker": {
-            "name": broker["company_name"],
-            "email": broker["email_address"]
-        },
-        "coverage": {
-            "lines": submission_data["coverage_lines"],
-            "effectiveDate": submission_data["effective_date"],
-            "expirationDate": submission_data["expiration_date"]
-        },
-        "documents": documents,
-        "complianceChecks": formatted_checks,
-        "timestamp": submission_data["created_at"],
-        "status": evaluation["overall_status"]
-    }
+            {
+                'checkId': f'check-{uuid.uuid4().hex[:8]}',
+                'category': 'Document Completeness',
+                'status': 'attention',
+                'findings': "Some required documents are missing or pending review.",
+                'timestamp': datetime.now().isoformat(),
+                'dataPoints': {
+                    'requiredDocuments': 'Application, Loss Runs, Financial Statements',
+                    'providedDocuments': 'Application, Loss Runs'
+                }
+            }
+        ]
+        
+        # Set the overall status based on compliance checks
+        if any(check['status'] == 'non-compliant' for check in formatted_submission['complianceChecks']):
+            formatted_submission['status'] = 'Non-Compliant'
+        elif any(check['status'] == 'attention' for check in formatted_submission['complianceChecks']):
+            formatted_submission['status'] = 'At Risk'
+        else:
+            formatted_submission['status'] = 'Compliant'
+        
+        return jsonify(formatted_submission)
     
-    return jsonify(detail)
+    except Exception as e:
+        print(f"Error in get_submission_detail: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# Add a health check endpoint
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok", "message": "API server is running"})
+
+# Root endpoint
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Insurance Submission API is running"})
 
 # NEW API: Get restricted NAICS codes
 @app.route('/api/restricted-naics', methods=['GET'])
@@ -323,37 +302,59 @@ def update_restricted_naics():
 @app.route('/api/evaluate-compliance', methods=['POST'])
 def evaluate_submission_compliance():
     submission = request.json.get('submission', {})
-    results = evaluate_compliance(submission)
+    
+    # Extract the industry code
+    industry_code = get_nested_value(submission, 'insured.industry.code', '')
+    
+    # Determine compliance based on industry code
+    checks = []
+    overall_status = "Compliant"
+    
+    # Document completeness check (always included)
+    checks.append({
+        "checkId": str(uuid.uuid4())[:8],
+        "category": "Document Completeness",
+        "status": "compliant",
+        "findings": "Required documents check passed.",
+        "timestamp": datetime.now().isoformat(),
+        "dataPoints": {}
+    })
+    
+    # NAICS code restriction check
+    if NAICS_RULE_ENABLED and industry_code in RESTRICTED_NAICS_CODES:
+        checks.append({
+            "checkId": str(uuid.uuid4())[:8],
+            "category": "Risk Appetite", 
+            "status": "non-compliant",
+            "findings": f"Industry code {industry_code} is in the restricted list.",
+            "timestamp": datetime.now().isoformat(),
+            "dataPoints": {
+                "industryCode": industry_code,
+                "industryDescription": get_nested_value(submission, 'insured.industry.description', ''),
+                "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES)
+            }
+        })
+        overall_status = "Non-Compliant"
+    else:
+        checks.append({
+            "checkId": str(uuid.uuid4())[:8],
+            "category": "Risk Appetite",
+            "status": "compliant",
+            "findings": "Industry classification within acceptable parameters.",
+            "timestamp": datetime.now().isoformat(),
+            "dataPoints": {
+                "industryCode": industry_code,
+                "industryDescription": get_nested_value(submission, 'insured.industry.description', '')
+            }
+        })
     
     # Format response to match the frontend expectation
     response = {
-        "submissionId": submission.get("submissionId", ""),
-        "timestamp": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-        "checks": [],
-        "overallStatus": results["overall_status"]
+        "submissionId": get_nested_value(submission, 'submissionId', ''),
+        "timestamp": datetime.now().isoformat(),
+        "checks": checks,
+        "overallStatus": overall_status
     }
-    
-    # Convert the compliance checks format
-    for check in results["checks"]:
-        formatted_check = {
-            "checkId": str(uuid.uuid4())[:8],
-            "category": check["check_type"],
-            "status": "compliant" if check["result"] == "Pass" else 
-                      "attention" if check["result"] == "Warning" else "non-compliant",
-            "findings": check["details"],
-            "timestamp": check["timestamp"],
-            "dataPoints": {}
-        }
-        
-        # Add data points for NAICS check
-        if check["check_type"] == "Risk Appetite":
-            formatted_check["dataPoints"] = {
-                "industryCode": submission.get("insured", {}).get("industry", {}).get("code", ""),
-                "industryDescription": submission.get("insured", {}).get("industry", {}).get("description", ""),
-                "restrictedCodes": ", ".join(RESTRICTED_NAICS_CODES) if check["result"] == "Fail" else ""
-            }
-        
-        response["checks"].append(formatted_check)
     
     return jsonify(response)
 

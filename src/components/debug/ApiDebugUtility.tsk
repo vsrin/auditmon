@@ -1,0 +1,164 @@
+// src/components/debug/ApiDebugUtility.tsx
+import React, { useState, useEffect } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  Button, 
+  CircularProgress, 
+  Alert, 
+  TextField,
+  Divider
+} from '@mui/material';
+import apiService from '../../services/api/apiService';
+
+const ApiDebugUtility: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rawResponse, setRawResponse] = useState<any>(null);
+  const [transformedData, setTransformedData] = useState<any>(null);
+  const [apiEndpoint, setApiEndpoint] = useState('');
+  
+  useEffect(() => {
+    // Get current API endpoint from apiService if possible
+    const currentEndpoint = (apiService as any).apiEndpoint;
+    if (currentEndpoint) {
+      setApiEndpoint(currentEndpoint);
+    }
+  }, []);
+  
+  const fetchRawData = async () => {
+    setLoading(true);
+    setError(null);
+    setRawResponse(null);
+    setTransformedData(null);
+    
+    try {
+      // Try to get the API endpoint if it's not already set
+      const endpoint = apiEndpoint || (apiService as any).apiEndpoint || 'http://localhost:8000/api';
+      
+      // Make a direct axios call to see the raw response
+      const axios = await import('axios');
+      const response = await axios.default.get(`${endpoint}/submissions`);
+      setRawResponse(response.data);
+      
+      // Then use the apiService to see how it transforms the data
+      const processedData = await apiService.getSubmissions();
+      setTransformedData(processedData);
+    } catch (err) {
+      console.error('Debug fetch error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <Box p={3}>
+      <Typography variant="h5" gutterBottom>
+        API Debug Utility
+      </Typography>
+      
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          API Endpoint Configuration
+        </Typography>
+        <TextField
+          fullWidth
+          label="API Endpoint"
+          variant="outlined"
+          value={apiEndpoint}
+          onChange={(e) => setApiEndpoint(e.target.value)}
+          placeholder="http://localhost:8000/api"
+          sx={{ mb: 2 }}
+        />
+        <Button 
+          variant="contained" 
+          color="primary"
+          onClick={fetchRawData}
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={20} /> : null}
+        >
+          {loading ? 'Fetching...' : 'Fetch API Data'}
+        </Button>
+      </Paper>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+      
+      {rawResponse && (
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Raw API Response
+          </Typography>
+          <Box 
+            component="pre" 
+            sx={{ 
+              p: 2, 
+              bgcolor: 'rgba(0, 0, 0, 0.04)', 
+              borderRadius: 1, 
+              maxHeight: '300px', 
+              overflow: 'auto',
+              fontSize: '0.75rem'
+            }}
+          >
+            {JSON.stringify(rawResponse, null, 2)}
+          </Box>
+        </Paper>
+      )}
+      
+      {transformedData && (
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Transformed Data (After apiService Processing)
+          </Typography>
+          <Box 
+            component="pre" 
+            sx={{ 
+              p: 2, 
+              bgcolor: 'rgba(0, 0, 0, 0.04)', 
+              borderRadius: 1, 
+              maxHeight: '300px', 
+              overflow: 'auto',
+              fontSize: '0.75rem'
+            }}
+          >
+            {JSON.stringify(transformedData, null, 2)}
+          </Box>
+        </Paper>
+      )}
+      
+      {rawResponse && transformedData && (
+        <Paper sx={{ p: 2, mt: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Data Mapping Issues
+          </Typography>
+          <Box mt={2}>
+            {transformedData.map((item: any, index: number) => (
+              <Box key={index} mb={2}>
+                <Typography variant="subtitle2">
+                  Submission ID: {item.submissionId || 'Unknown'}
+                </Typography>
+                <Typography variant="body2" color="error">
+                  {!item.insured?.name ? '• Missing insured name' : ''}
+                </Typography>
+                <Typography variant="body2" color="error">
+                  {!item.insured?.industry?.description ? '• Missing industry description' : ''}
+                </Typography>
+                <Typography variant="body2" color="error">
+                  {!item.status ? '• Missing status' : ''}
+                </Typography>
+                <Divider sx={{ my: 1 }} />
+              </Box>
+            ))}
+          </Box>
+        </Paper>
+      )}
+    </Box>
+  );
+};
+
+export default ApiDebugUtility;

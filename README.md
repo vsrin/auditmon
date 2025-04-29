@@ -194,3 +194,6 @@ insurance-monitoring-dashboard/
 This summary captures the current state of the project, highlighting the main components, implemented features, and areas for future improvement. The application now has a working demo mode with synthetic data that matches dashboard metrics, and a live mode that properly integrates with the Flask API and rule engine.
 
 DO NOT MAKE TYPESCRIPT ERRORS
+
+http://localhost:8000/api
+http://localhost:3001/api

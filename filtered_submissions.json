@@ -1,0 +1,578 @@
+[
+  {
+    "submissionId": "7767efe0-11ff-45eb-97de-bdc303bb60bf",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Wed, 09 Apr 2025 13:05:54 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "9bd069b7-3e47-4880-9394-b7fd0a8ad249",
+    "insured": {
+      "name": null,
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": null,
+        "city": null,
+        "state": null,
+        "zip": null
+      },
+      "yearsInBusiness": "",
+      "employeeCount": null
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Thu, 10 Apr 2025 14:43:03 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "fd0d7a5e-da48-49b1-be23-69d46622dff8",
+    "insured": {
+      "name": null,
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": null,
+        "city": null,
+        "state": null,
+        "zip": null
+      },
+      "yearsInBusiness": "",
+      "employeeCount": null
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Thu, 10 Apr 2025 15:24:08 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "30e18f3a-f1ff-4be7-aa2f-f21c3b16e729",
+    "insured": {
+      "name": null,
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": null,
+        "city": null,
+        "state": null,
+        "zip": null
+      },
+      "yearsInBusiness": "",
+      "employeeCount": null
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Thu, 10 Apr 2025 16:27:46 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "437a62be-df77-4a93-9751-6ad2d173a5ba",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Fri, 11 Apr 2025 08:48:55 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "5fd5fe04-4376-4039-b9fa-30399ac2027c",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Fri, 11 Apr 2025 09:56:29 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "623c3789-f78e-44d3-ac7c-012d02437f65",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Fri, 11 Apr 2025 13:17:02 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "71510469-9777-4f83-8d8b-22f1d6ad8321",
+    "insured": {
+      "name": "EASTMAN ROOF WATERPROOFING",
+      "industry": {
+        "code": "1761",
+        "description": "Roofing/siding contractor"
+      },
+      "address": {
+        "street": "1418 Douglas St",
+        "city": "SAN JOSE",
+        "state": "CA",
+        "zip": "95126"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "6"
+    },
+    "broker": {
+      "name": "AJG",
+      "email": "Sam@ajg.com"
+    },
+    "timestamp": "Tue, 15 Apr 2025 07:20:30 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "a450d371-4ad9-4dd4-87e6-1701db567861",
+    "insured": {
+      "name": "",
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": "",
+        "city": "",
+        "state": "",
+        "zip": ""
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "0"
+    },
+    "broker": {
+      "name": "",
+      "email": ""
+    },
+    "timestamp": "Tue, 15 Apr 2025 07:49:19 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "992ebd01-483a-4ce6-85eb-aa5b43455da7",
+    "insured": {
+      "name": "",
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": "",
+        "city": "",
+        "state": "",
+        "zip": ""
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "0"
+    },
+    "broker": {
+      "name": "",
+      "email": ""
+    },
+    "timestamp": "Tue, 15 Apr 2025 07:51:17 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "5a220a3b-ebc9-445c-a72a-800572614ae5",
+    "insured": {
+      "name": "",
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": "",
+        "city": "",
+        "state": "",
+        "zip": ""
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "0"
+    },
+    "broker": {
+      "name": "",
+      "email": ""
+    },
+    "timestamp": "Tue, 15 Apr 2025 07:51:18 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "386c10a3-c5b7-4648-9462-a9a5389fbfbd",
+    "insured": {
+      "name": "",
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": "",
+        "city": "",
+        "state": "",
+        "zip": ""
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "0"
+    },
+    "broker": {
+      "name": "",
+      "email": ""
+    },
+    "timestamp": "Tue, 15 Apr 2025 07:51:21 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "5f655c4e-71a8-41a8-86a4-58a387679fbf",
+    "insured": {
+      "name": "THE SAN FRANCISCO ART INSTITUTE",
+      "industry": {
+        "code": "8221",
+        "description": "College/university"
+      },
+      "address": {
+        "street": "800 Chestnut St",
+        "city": "San Francisco",
+        "state": "CA",
+        "zip": "94133"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "152"
+    },
+    "broker": {
+      "name": "relationinsurance",
+      "email": "Foster@relationinsurance.com"
+    },
+    "timestamp": "Mon, 21 Apr 2025 11:43:40 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "58808b88-133c-47b3-bf8d-6d38d3e9775c",
+    "insured": {
+      "name": "J & R M INC.",
+      "industry": {
+        "code": "7352",
+        "description": "Medical equipment rental"
+      },
+      "address": {
+        "street": "401 W College St",
+        "city": "Lake Charles",
+        "state": "LA",
+        "zip": "70605"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "2"
+    },
+    "broker": {
+      "name": "example",
+      "email": "sender@example.com"
+    },
+    "timestamp": "Mon, 21 Apr 2025 11:53:33 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "824d4f11-c462-404d-bd47-44171f8e2bc7",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Mon, 21 Apr 2025 19:15:35 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "95885465-63e8-413c-97d1-e309bdadd454",
+    "insured": {
+      "name": "GREEN TREE LANDSCAPE",
+      "industry": {
+        "code": "0781",
+        "description": "Landscape services"
+      },
+      "address": {
+        "street": "1310 W Euless Blvd",
+        "city": "Euless",
+        "state": "TX",
+        "zip": "76040"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "4"
+    },
+    "broker": {
+      "name": "Upshaw Insurance Agency, Inc.",
+      "email": "lale@upshaw-insurance.com"
+    },
+    "timestamp": "Wed, 23 Apr 2025 09:54:09 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "4497e032-6773-40d0-861c-81e3bf73fb1c",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Wed, 23 Apr 2025 09:58:40 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "205a6b67-0c2b-429a-bfeb-39501eb608bc",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": "Shana Insurance Services Corp.",
+      "email": "diana@shanainsurance.com"
+    },
+    "timestamp": "Wed, 23 Apr 2025 12:57:01 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "cad1c803-0083-45f7-a8e7-633528ae5e59",
+    "insured": {
+      "name": null,
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": null,
+        "city": null,
+        "state": null,
+        "zip": null
+      },
+      "yearsInBusiness": "",
+      "employeeCount": null
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Wed, 23 Apr 2025 13:17:40 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "7198af0f-c43b-4e14-abbf-565d85711f98",
+    "insured": {
+      "name": null,
+      "industry": {
+        "code": null,
+        "description": null
+      },
+      "address": {
+        "street": null,
+        "city": null,
+        "state": null,
+        "zip": null
+      },
+      "yearsInBusiness": "",
+      "employeeCount": null
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Wed, 23 Apr 2025 13:25:40 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "df8be93a-bd47-4e4a-8d65-00849cfe2199",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Fri, 25 Apr 2025 08:24:13 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "3873f67c-edeb-460d-92f9-727af6b95023",
+    "insured": {
+      "name": "MANZ PROPERTIES LLC",
+      "industry": {
+        "code": "6512",
+        "description": "Nonresidential building operator"
+      },
+      "address": {
+        "street": "2850 E 46th St",
+        "city": "Vernon",
+        "state": "CA",
+        "zip": "90058-"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "3"
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Fri, 25 Apr 2025 09:29:34 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "9a113d08-838c-447d-adea-31a292b94559",
+    "insured": {
+      "name": "J & R M INC.",
+      "industry": {
+        "code": "7352",
+        "description": "Medical equipment rental"
+      },
+      "address": {
+        "street": "401 W College St",
+        "city": "Lake Charles",
+        "state": "LA",
+        "zip": "70605"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "2"
+    },
+    "broker": {
+      "name": "example",
+      "email": "sender@example.com"
+    },
+    "timestamp": "Fri, 25 Apr 2025 14:17:59 GMT",
+    "status": ""
+  },
+  {
+    "submissionId": "9f21cb37-3be0-49eb-b1b8-c4e36f3be54a",
+    "insured": {
+      "name": "J & R M INC.",
+      "industry": {
+        "code": "7352",
+        "description": "Medical equipment rental"
+      },
+      "address": {
+        "street": "401 W College St",
+        "city": "Lake Charles",
+        "state": "LA",
+        "zip": "70605"
+      },
+      "yearsInBusiness": "",
+      "employeeCount": "2"
+    },
+    "broker": {
+      "name": null,
+      "email": null
+    },
+    "timestamp": "Fri, 25 Apr 2025 15:10:52 GMT",
+    "status": ""
+  }
+]
