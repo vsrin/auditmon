@@ -279,20 +279,59 @@ const RuleEngineDemo: React.FC = () => {
         console.error('Error refreshing submissions:', error);
       }
     } else {
-      // For demo mode, we can manually update statuses
-      const updatedSubmissions = submissions.map(sub => {
-        // Use the properly imported type to ensure code property is available
-        const industryCode = (sub.insured?.industry as Industry)?.code || '';
-        const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
-        
-        // Only reset the status if it was previously marked as non-compliant due to NAICS
-        return wasRestricted 
-          ? { ...sub, status: 'Compliant' } 
-          : sub;
-      });
+      // ENHANCED FIX: For demo mode, use rule engine provider for proper re-evaluation
+      dispatch(fetchSubmissionsStart());
       
-      dispatch(fetchSubmissionsSuccess(updatedSubmissions));
-      findAffectedSubmissions(updatedSubmissions, []);
+      try {
+        // First get the latest data
+        const data = await apiService.getSubmissions();
+        
+        // Process each submission for re-evaluation with disabled rule
+        const updatedSubmissions = await Promise.all(data.map(async (sub) => {
+          try {
+            // Create a detail version of the submission for evaluation
+            const submissionDetail = sub as any; // Type cast as SubmissionDetail
+            
+            // Use rule engine provider to evaluate with rules disabled
+            // Since we've already set naicsRuleEnabled to false in the provider,
+            // this will correctly use that setting
+            const evaluationResult = await ruleEngineProvider.evaluateSubmission(submissionDetail);
+            
+            return {
+              ...sub,
+              status: evaluationResult.overallStatus,
+              complianceChecks: evaluationResult.checks
+            };
+          } catch (error) {
+            console.error(`Error re-evaluating submission ${sub.submissionId}:`, error);
+            // If evaluation fails, manually reset if it was previously restricted
+            const industryCode = (sub.insured?.industry as Industry)?.code || '';
+            const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
+            
+            return wasRestricted 
+              ? { ...sub, status: 'Compliant' } 
+              : sub;
+          }
+        }));
+        
+        dispatch(fetchSubmissionsSuccess(updatedSubmissions));
+        findAffectedSubmissions(updatedSubmissions, []);
+      } catch (error) {
+        console.error('Error during submission re-evaluation:', error);
+        
+        // Fallback to simple manual update if the advanced approach fails
+        const manuallyUpdatedSubmissions = submissions.map(sub => {
+          const industryCode = (sub.insured?.industry as Industry)?.code || '';
+          const wasRestricted = restrictedCodes.some(code => code.code === industryCode);
+          
+          return wasRestricted 
+            ? { ...sub, status: 'Compliant' } 
+            : sub;
+        });
+        
+        dispatch(fetchSubmissionsSuccess(manuallyUpdatedSubmissions));
+        findAffectedSubmissions(manuallyUpdatedSubmissions, []);
+      }
     }
   };
 
@@ -301,17 +340,45 @@ const RuleEngineDemo: React.FC = () => {
     try {
       // Refresh submissions to see the effects of the rule changes
       if (!isDemoMode) {
-        // For live mode, fetch from API
+        // For live mode, fetch from API - this remains unchanged
         dispatch(fetchSubmissionsStart());
         const data = await apiService.getSubmissions();
         dispatch(fetchSubmissionsSuccess(data));
         findAffectedSubmissions(data, isRuleActive ? currentRestrictedCodes : []);
       } else {
-        // For demo mode, manually refresh submissions
+        // ENHANCED FIX: For demo mode, use the rule engine provider to properly evaluate submissions
         dispatch(fetchSubmissionsStart());
+        
+        // First get the latest data
         const data = await apiService.getSubmissions();
-        dispatch(fetchSubmissionsSuccess(data));
-        findAffectedSubmissions(data, isRuleActive ? currentRestrictedCodes : []);
+        
+        // Process each submission to get proper compliance evaluations based on current rules
+        const updatedSubmissions = await Promise.all(data.map(async (sub) => {
+          try {
+            // Create a detail version of the submission for evaluation
+            const submissionDetail = sub as any; // Type cast as SubmissionDetail
+            
+            // Use rule engine provider to evaluate the submission with current rules
+            // This will correctly use the updated restrictedNaicsCodes from the provider
+            const evaluationResult = await ruleEngineProvider.evaluateSubmission(submissionDetail);
+            
+            // Update the submission with evaluation results
+            return {
+              ...sub,
+              status: evaluationResult.overallStatus,
+              // Store compliance checks if needed in the list view
+              complianceChecks: evaluationResult.checks
+            };
+          } catch (error) {
+            console.error(`Error evaluating submission ${sub.submissionId}:`, error);
+            // If evaluation fails, don't change the submission
+            return sub;
+          }
+        }));
+        
+        // Update Redux store with the evaluated submissions
+        dispatch(fetchSubmissionsSuccess(updatedSubmissions));
+        findAffectedSubmissions(updatedSubmissions, isRuleActive ? currentRestrictedCodes : []);
       }
     } catch (error) {
       console.error('Error refreshing submissions:', error);
@@ -325,7 +392,7 @@ const RuleEngineDemo: React.FC = () => {
   // Update affected submissions when submissions data changes
   useEffect(() => {
     findAffectedSubmissions(submissions, isRuleActive ? restrictedCodes : []);
-  }, [submissions, isRuleActive, restrictedCodes, findAffectedSubmissions]); // Added findAffectedSubmissions to deps
+  }, [submissions, isRuleActive, restrictedCodes, findAffectedSubmissions]);
 
   return (
     <Box>
