@@ -5,6 +5,17 @@ import {
     EvaluationResult, 
     ComplianceCheck 
   } from './ruleEngineInterface';
+  import {
+    AuditComplianceStatus,
+    RuleImpactAnalysis
+  } from '../../types/auditCompliance';
+  import { Submission } from '../../types';
+  import { 
+    generateAuditComplianceStatus 
+  } from './auditRuleMapping';
+  import { 
+    analyzeRuleImpact 
+  } from './ruleImpactAnalysis';
   
   export class LocalRuleEngine implements RuleEngineInterface {
     private rules: Rule[] = [];
@@ -33,7 +44,8 @@ import {
               severity: "warning",
               message: "Industry is in restricted list"
             }
-          ]
+          ],
+          auditQuestionIds: ["risk-appetite"]
         },
         // Add more rules that match your current logic
       ];
@@ -51,7 +63,7 @@ import {
           checks.push({
             checkId: rule.id,
             category: rule.category,
-            status: result.severity === 'warning' ? 'at risk' : 
+            status: result.severity === 'warning' ? 'at-risk' : 
                    result.severity === 'error' ? 'non-compliant' : 'compliant',
             timestamp: new Date().toISOString(),
             findings: result.message,
@@ -62,7 +74,7 @@ import {
           if (result.severity === 'error' && overallStatus !== 'non-compliant') {
             overallStatus = 'non-compliant';
           } else if (result.severity === 'warning' && overallStatus === 'compliant') {
-            overallStatus = 'at risk';
+            overallStatus = 'at-risk';
           }
         }
       }
@@ -195,5 +207,34 @@ import {
     
     async testRule(rule: Rule, data: any): Promise<any> {
       return this.evaluateRule(rule, data);
+    }
+    
+    // New methods for audit compliance
+    async getRulesByAuditQuestion(questionId: string): Promise<Rule[]> {
+      return this.rules.filter(rule => 
+        rule.auditQuestionIds && rule.auditQuestionIds.includes(questionId)
+      );
+    }
+    
+    async getAuditComplianceStatus(submission: any): Promise<AuditComplianceStatus> {
+      const evaluationResult = await this.evaluateSubmission(submission);
+      return generateAuditComplianceStatus(
+        submission.submissionId,
+        evaluationResult.checks
+      );
+    }
+    
+    async analyzeRuleImpact(
+      rule: Rule,
+      originalRule: Rule | null,
+      submissions: Submission[]
+    ): Promise<RuleImpactAnalysis> {
+      return analyzeRuleImpact(
+        rule,
+        originalRule,
+        submissions,
+        true, // Always in demo mode for local engine
+        ''    // No URL needed for local engine
+      );
     }
   }

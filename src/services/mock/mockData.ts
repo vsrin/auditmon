@@ -1,5 +1,11 @@
 // src/services/mock/mockData.ts
 import { Submission, SubmissionDetail, ComplianceCheck } from '../../types';
+import { 
+  AuditComplianceStatus, 
+  LifecycleStage, 
+  ComplianceStatus 
+} from '../../types/auditCompliance';
+import { lifecycleStages } from '../../services/rules/auditQuestions';
 
 // Configure the exact counts to match dashboard metrics
 const TOTAL_SUBMISSIONS = 42;
@@ -194,10 +200,156 @@ mockSubmissions.forEach(submission => {
   }
 });
 
+// =====================================================
+// NEW AUDIT COMPLIANCE MOCK DATA FOR DEMO MODE
+// =====================================================
+
+// Generate mock audit compliance status for a submission
+export const getMockAuditComplianceStatus = (submissionId: string): AuditComplianceStatus => {
+  // Find the base submission to use its status
+  const baseSubmission = mockSubmissions.find(sub => sub.submissionId === submissionId);
+  const baseStatus = baseSubmission?.status?.toLowerCase() || 'compliant';
+  
+  // Generate a deterministic but seemingly random status based on submission ID
+  const seed = submissionId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  const stageResults = lifecycleStages.map(stage => {
+    const questionResults = stage.auditQuestions.map(question => {
+      // Generate a deterministic status based on question ID and submission ID
+      const questionSeed = question.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const combinedSeed = (seed + questionSeed) % 100;
+      
+      // Base status on submission status but with some variation
+      let status: ComplianceStatus;
+      if (baseStatus === 'compliant') {
+        // Mostly compliant with some at-risk
+        status = combinedSeed < 85 ? 'compliant' : 'at-risk';
+      } else if (baseStatus === 'at risk') {
+        // Mix of compliant, at-risk, and some non-compliant
+        if (combinedSeed < 40) {
+          status = 'compliant';
+        } else if (combinedSeed < 85) {
+          status = 'at-risk';
+        } else {
+          status = 'non-compliant';
+        }
+      } else {
+        // Mostly non-compliant with some at-risk
+        status = combinedSeed < 30 ? 'at-risk' : 'non-compliant';
+      }
+      
+      // Generate findings based on status
+      let findings = '';
+      if (status === 'at-risk') {
+        findings = `Potential issues identified with ${question.text.toLowerCase()}`;
+      } else if (status === 'non-compliant') {
+        findings = `Failed compliance check: ${question.text.toLowerCase()}`;
+      } else if (status === 'compliant') {
+        findings = `All compliance requirements met for ${question.text.toLowerCase()}`;
+      } else {
+        findings = 'No evaluation performed';
+      }
+      
+      return {
+        questionId: question.id,
+        status,
+        findings,
+        triggeredRules: status !== 'compliant' ? [`mock-rule-${questionSeed % 10}`] : [],
+        updatedAt: new Date().toISOString()
+      };
+    });
+    
+    // Determine overall status for stage
+    let overallStatus: ComplianceStatus = 'compliant';
+    if (questionResults.some(q => q.status === 'non-compliant')) {
+      overallStatus = 'non-compliant';
+    } else if (questionResults.some(q => q.status === 'at-risk')) {
+      overallStatus = 'at-risk';
+    } else if (questionResults.some(q => q.status as string === 'not-evaluated')) {
+      overallStatus = 'not-evaluated';
+    }
+    
+    return {
+      stageId: stage.id,
+      questionResults,
+      overallStatus
+    };
+  });
+  
+  // Determine overall submission compliance status
+  let overallStatus: ComplianceStatus = 'compliant';
+  if (stageResults.some(s => s.overallStatus === 'non-compliant')) {
+    overallStatus = 'non-compliant';
+  } else if (stageResults.some(s => s.overallStatus === 'at-risk')) {
+    overallStatus = 'at-risk';
+  } else if (stageResults.some(s => s.overallStatus === 'not-evaluated')) {
+    overallStatus = 'not-evaluated';
+  }
+  
+  return {
+    submissionId,
+    timestamp: new Date().toISOString(),
+    stageResults,
+    overallStatus
+  };
+};
+
+// Generate mock compliance metrics
+export const getMockComplianceMetrics = () => {
+  const stageMetrics: Record<LifecycleStage, Record<ComplianceStatus, number>> = {} as any;
+  const questionMetrics: Record<string, Record<ComplianceStatus, number>> = {};
+  
+  // Calculate percentages based on our existing submission counts
+  const total = TOTAL_SUBMISSIONS;
+  const compliantPct = COMPLIANT_COUNT / total;
+  const atRiskPct = AT_RISK_COUNT / total;
+  const nonCompliantPct = NON_COMPLIANT_COUNT / total;
+  
+  // Initialize metrics for each stage
+  lifecycleStages.forEach(stage => {
+    // Distribute counts based on our existing ratios
+    stageMetrics[stage.id] = {
+      'compliant': Math.round(total * compliantPct),
+      'at-risk': Math.round(total * atRiskPct),
+      'non-compliant': Math.round(total * nonCompliantPct),
+      'not-evaluated': 0 // None not evaluated for demo
+    };
+    
+    // Initialize metrics for each question - with some variation
+    stage.auditQuestions.forEach((question, index) => {
+      // Add some variation to make it interesting
+      const variation = (index % 3 - 1) * 0.1; // -0.1, 0, or 0.1
+      
+      questionMetrics[question.id] = {
+        'compliant': Math.round(total * (compliantPct + variation)),
+        'at-risk': Math.round(total * (atRiskPct + variation / 2)),
+        'non-compliant': Math.round(total * (nonCompliantPct + variation / 2)),
+        'not-evaluated': 0 // None not evaluated for demo
+      };
+      
+      // Make sure we have at least 1 in each category for demo purposes
+      if (questionMetrics[question.id]['compliant'] < 1) questionMetrics[question.id]['compliant'] = 1;
+      if (questionMetrics[question.id]['at-risk'] < 1) questionMetrics[question.id]['at-risk'] = 1;
+      if (questionMetrics[question.id]['non-compliant'] < 1) questionMetrics[question.id]['non-compliant'] = 1;
+      
+      // Make sure total adds up to TOTAL_SUBMISSIONS
+      const currentTotal = Object.values(questionMetrics[question.id]).reduce((a, b) => a + b, 0);
+      if (currentTotal !== total) {
+        const diff = total - currentTotal;
+        questionMetrics[question.id]['compliant'] += diff;
+      }
+    });
+  });
+  
+  return { stageMetrics, questionMetrics };
+};
+
 // Create a named export object to avoid the ESLint warning
 const mockDataExports = {
   mockSubmissions,
-  getMockSubmissionDetail
+  getMockSubmissionDetail,
+  getMockAuditComplianceStatus,
+  getMockComplianceMetrics
 };
 
 export default mockDataExports;

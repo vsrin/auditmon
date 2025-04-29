@@ -21,7 +21,8 @@ import {
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
   Build as BuildIcon,
-  BugReport as BugReportIcon // Added for debug icon
+  BugReport as BugReportIcon, // Added for debug icon
+  Assignment as AssignmentIcon // Added for Audit Compliance
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux'; // Removed unused dispatch
@@ -149,6 +150,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <AssessmentIcon fontSize="small" />
           </Box>
           <Typography>Reports</Typography>
+        </SidebarItem>
+        
+        {/* Added new Audit Compliance navigation item */}
+        <SidebarItem
+          onClick={() => navigateTo('/audit-compliance')}
+        >
+          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
+            <AssignmentIcon fontSize="small" />
+          </Box>
+          <Typography>Audit Compliance</Typography>
         </SidebarItem>
       </Box>
       

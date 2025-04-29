@@ -91,3 +91,6 @@ export interface ConfigState {
   useRemoteRuleEngine: boolean;
   ruleEngineApiUrl: string;
 }
+
+// Export audit compliance types
+export * from './auditCompliance';

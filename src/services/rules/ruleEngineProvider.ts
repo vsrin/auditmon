@@ -1,7 +1,27 @@
 // src/services/rules/ruleEngineProvider.ts
 import axios from 'axios';
-import { SubmissionDetail } from '../../types';
+import { Submission, SubmissionDetail } from '../../types';
 import RuleService from './ruleService';
+import { RemoteRuleEngine } from './remoteRuleEngine';
+import { LocalRuleEngine } from './localRuleEngine';
+import { Rule } from './ruleEngineInterface';
+import { 
+  AuditComplianceStatus, 
+  RuleImpactAnalysis 
+} from '../../types/auditCompliance';
+import { 
+  generateAuditComplianceStatus 
+} from './auditRuleMapping';
+import { 
+  analyzeRuleImpact 
+} from './ruleImpactAnalysis';
+import {
+  clearEvaluationCache
+} from './ruleEvaluationService';
+import {
+  clearRuleCache,
+  clearRuleQuestionMappingCache
+} from './ruleCacheService';
 
 /**
  * RuleEngineProvider provides a unified interface for accessing rule engine functionality
@@ -30,6 +50,9 @@ class RuleEngineProvider {
     this.useRemoteEngine = useRemote;
     this.ruleEngineApiUrl = apiUrl;
     console.log(`Rule engine configured: useRemote=${useRemote}, apiUrl=${apiUrl}`);
+    
+    // Clear caches when configuration changes
+    this.clearAllCaches();
   }
 
   /**
@@ -41,7 +64,19 @@ class RuleEngineProvider {
     this.currentDemoMode = isDemoMode;
     if (wasChanged) {
       console.log(`Rule engine demo mode set to: ${isDemoMode ? 'DEMO' : 'LIVE'}`);
+      
+      // Clear caches when mode changes
+      this.clearAllCaches();
     }
+  }
+
+  /**
+   * Clear all caches
+   */
+  private clearAllCaches(): void {
+    clearEvaluationCache();
+    clearRuleCache();
+    clearRuleQuestionMappingCache();
   }
 
   /**
@@ -59,6 +94,9 @@ class RuleEngineProvider {
   updateRestrictedNaicsCodes(codes: string[]): void {
     this.restrictedNaicsCodes = codes;
     console.log('Updated restricted NAICS codes:', codes);
+    
+    // Clear evaluation cache since rules have changed
+    clearEvaluationCache();
   }
 
   /**
@@ -68,6 +106,9 @@ class RuleEngineProvider {
   setNaicsRuleEnabled(enabled: boolean): void {
     this.naicsRuleEnabled = enabled;
     console.log('NAICS rule enabled:', enabled);
+    
+    // Clear evaluation cache since rules have changed
+    clearEvaluationCache();
   }
 
   /**
@@ -84,6 +125,212 @@ class RuleEngineProvider {
    */
   isNaicsRuleEnabled(): boolean {
     return this.naicsRuleEnabled;
+  }
+
+  /**
+   * Get a single rule by ID
+   * @param ruleId The rule ID
+   * @returns The rule if found
+   */
+  async getRule(ruleId: string): Promise<Rule> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      return remoteEngine.getRule(ruleId);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      return localEngine.getRule(ruleId);
+    }
+  }
+  
+  /**
+   * Get all rules, optionally filtered by category
+   * @param category Optional category filter
+   * @returns Array of rules
+   */
+  async getRules(category?: string): Promise<Rule[]> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      return remoteEngine.getRules(category);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      return localEngine.getRules(category);
+    }
+  }
+  
+  /**
+   * Create a new rule
+   * @param rule The rule to create
+   * @returns The created rule
+   */
+  async createRule(rule: Rule): Promise<Rule> {
+    let createdRule: Rule;
+    
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      createdRule = await remoteEngine.createRule(rule);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      createdRule = await localEngine.createRule(rule);
+    }
+    
+    // Clear caches since rules have changed
+    clearRuleCache();
+    clearEvaluationCache();
+    
+    return createdRule;
+  }
+  
+  /**
+   * Update an existing rule
+   * @param rule The rule to update
+   * @returns The updated rule
+   */
+  async updateRule(rule: Rule): Promise<Rule> {
+    let updatedRule: Rule;
+    
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      updatedRule = await remoteEngine.updateRule(rule);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      updatedRule = await localEngine.updateRule(rule);
+    }
+    
+    // Clear caches since rules have changed
+    clearRuleCache();
+    clearEvaluationCache();
+    
+    return updatedRule;
+  }
+  
+  /**
+   * Delete a rule
+   * @param ruleId The ID of the rule to delete
+   * @returns Whether the deletion was successful
+   */
+  async deleteRule(ruleId: string): Promise<boolean> {
+    let success: boolean;
+    
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      success = await remoteEngine.deleteRule(ruleId);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      success = await localEngine.deleteRule(ruleId);
+    }
+    
+    // Clear caches since rules have changed
+    if (success) {
+      clearRuleCache();
+      clearEvaluationCache();
+    }
+    
+    return success;
+  }
+  
+  /**
+   * Test a rule against data
+   * @param rule The rule to test
+   * @param data The data to test against
+   * @returns The test result
+   */
+  async testRule(rule: Rule, data: any): Promise<any> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      return remoteEngine.testRule(rule, data);
+    } else {
+      const localEngine = new LocalRuleEngine();
+      return localEngine.testRule(rule, data);
+    }
+  }
+
+  /**
+   * Get rules for a specific audit question
+   * @param questionId The audit question ID
+   * @returns Rules related to the audit question
+   */
+  async getRulesByAuditQuestion(questionId: string): Promise<Rule[]> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      if (remoteEngine.getRulesByAuditQuestion) {
+        return remoteEngine.getRulesByAuditQuestion(questionId);
+      }
+    } 
+    
+    // Fallback to local rule engine or if remote doesn't support this method
+    const localEngine = new LocalRuleEngine();
+    if (localEngine.getRulesByAuditQuestion) {
+      return localEngine.getRulesByAuditQuestion(questionId);
+    }
+    
+    // Fallback: fetch all rules and filter client-side
+    const allRules = await this.getRules();
+    return allRules.filter(rule => 
+      rule.auditQuestionIds && rule.auditQuestionIds.includes(questionId)
+    );
+  }
+
+  /**
+   * Get audit compliance status for a submission
+   * @param submission The submission to evaluate
+   * @returns Audit compliance status
+   */
+  async getAuditComplianceStatus(submission: SubmissionDetail): Promise<AuditComplianceStatus> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      if (remoteEngine.getAuditComplianceStatus) {
+        try {
+          return await remoteEngine.getAuditComplianceStatus(submission);
+        } catch (error) {
+          console.error('Error getting audit compliance status from remote engine:', error);
+          // Fall through to local evaluation
+        }
+      }
+    }
+    
+    // Fallback to local evaluation
+    // First evaluate the submission
+    const evaluationResult = await this.evaluateSubmission(submission);
+    
+    // Then generate audit compliance status from those checks
+    return generateAuditComplianceStatus(
+      submission.submissionId,
+      evaluationResult.checks
+    );
+  }
+
+  /**
+   * Analyze the impact of a rule change
+   * @param rule The new or modified rule
+   * @param originalRule The original rule (if modifying)
+   * @param submissions Submissions to analyze
+   * @returns Impact analysis
+   */
+  async analyzeRuleImpact(
+    rule: Rule,
+    originalRule: Rule | null,
+    submissions: Submission[]
+  ): Promise<RuleImpactAnalysis> {
+    if (this.useRemoteEngine && !this.currentDemoMode) {
+      const remoteEngine = new RemoteRuleEngine(this.ruleEngineApiUrl);
+      if (remoteEngine.analyzeRuleImpact) {
+        try {
+          return await remoteEngine.analyzeRuleImpact(rule, originalRule, submissions);
+        } catch (error) {
+          console.error('Error analyzing rule impact with remote engine:', error);
+          // Fall through to local analysis
+        }
+      }
+    }
+    
+    // Fallback to local analysis
+    return analyzeRuleImpact(
+      rule,
+      originalRule,
+      submissions,
+      this.currentDemoMode,
+      this.ruleEngineApiUrl
+    );
   }
 
   /**

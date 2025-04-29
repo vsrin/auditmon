@@ -19,6 +19,8 @@ import ConfigurationUtility from './components/config/ConfigurationUtility';
 import Alerts from './components/alerts/Alerts';
 import RuleEngineDemo from './services/rules/RuleEngineDemo'; // Import RuleEngineDemo component
 import ApiDebugPage from './components/debug/ApiDebugPage'; // Import the new API Debug Page
+import AuditComplianceDashboard from './components/audit/AuditComplianceDashboard';
+
 
 // Configure API service on startup
 import apiService from './services/api/apiService';
@@ -61,6 +63,7 @@ const AppContent: React.FC = () => {
         <Route path="/rule-engine" element={<RuleEngineDemo />} />
         <Route path="/api-debug" element={<ApiDebugPage />} /> {/* Add the API Debug Page route */}
         <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/audit-compliance" element={<AuditComplianceDashboard />} />
       </Routes>
     </Layout>
   );
