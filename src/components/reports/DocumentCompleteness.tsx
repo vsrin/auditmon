@@ -30,21 +30,83 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-interface DocumentCompletenessProps {
-  submissions: any[];
+// Define interfaces for the data structures
+interface DocumentTypeCount {
+  name: string;
+  value: number;
 }
 
-const DocumentCompleteness: React.FC<DocumentCompletenessProps> = ({ submissions }) => {
+interface StatusBreakdown {
+  name: string;
+  value: number;
+}
+
+interface ReportsData {
+  documentStatusCounts: {
+    processed: number;
+    pending: number;
+    failed: number;
+  };
+  documentTypesDistribution: DocumentTypeCount[];
+  // other properties might be here but we're not using them in this component
+}
+
+interface DocumentCompletenessProps {
+  submissions: any[];
+  reportsData?: ReportsData;
+}
+
+const DocumentCompleteness: React.FC<DocumentCompletenessProps> = ({ submissions, reportsData }) => {
   // Calculate document statistics
   const stats = useMemo(() => {
+    // Use enhanced reports data if available
+    if (reportsData && reportsData.documentStatusCounts && reportsData.documentTypesDistribution) {
+      const totalDocuments = reportsData.documentStatusCounts.processed +
+                            reportsData.documentStatusCounts.pending +
+                            reportsData.documentStatusCounts.failed;
+      
+      // Count submissions with complete documents
+      let completeSubmissions = 0;
+      submissions.forEach(sub => {
+        const detail = sub.documents || [];
+        const allProcessed = detail.every((doc: any) => 
+          (doc.status || '').toLowerCase() === 'processed');
+        
+        if (allProcessed && detail.length > 0) {
+          completeSubmissions++;
+        }
+      });
+      
+      const completionRate = submissions.length > 0 
+        ? Math.round((completeSubmissions / submissions.length) * 100) 
+        : 0;
+      
+      // Status breakdown
+      const statusBreakdown = [
+        { name: 'Processed', value: reportsData.documentStatusCounts.processed },
+        { name: 'Pending', value: reportsData.documentStatusCounts.pending },
+        { name: 'Failed', value: reportsData.documentStatusCounts.failed }
+      ];
+      
+      return {
+        totalSubmissions: submissions.length,
+        totalDocuments,
+        completeSubmissions,
+        completionRate,
+        statusBreakdown,
+        documentTypes: reportsData.documentTypesDistribution
+      };
+    }
+
+    // Fall back to calculation from submissions if reports data not available
     if (!submissions || submissions.length === 0) {
       return {
         totalSubmissions: 0,
         totalDocuments: 0,
         completeSubmissions: 0,
         completionRate: 0,
-        statusBreakdown: [],
-        documentTypes: []
+        statusBreakdown: [] as StatusBreakdown[],
+        documentTypes: [] as DocumentTypeCount[]
       };
     }
     
@@ -109,7 +171,7 @@ const DocumentCompleteness: React.FC<DocumentCompletenessProps> = ({ submissions
       statusBreakdown,
       documentTypes
     };
-  }, [submissions]);
+  }, [submissions, reportsData]);
   
   // Colors for status pie chart
   const COLORS = ['#4CAF50', '#FF9800', '#F44336'];
@@ -220,7 +282,7 @@ const DocumentCompleteness: React.FC<DocumentCompletenessProps> = ({ submissions
                 {stats.documentTypes.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={stats.documentTypes}
+                      data={stats.documentTypes.slice(0, 8)} // Show top 8 for better visualization
                       layout="vertical"
                       margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
                     >
@@ -259,7 +321,7 @@ const DocumentCompleteness: React.FC<DocumentCompletenessProps> = ({ submissions
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {stats.documentTypes.map((type) => (
+                    {stats.documentTypes.map((type: DocumentTypeCount) => (
                       <TableRow key={type.name}>
                         <TableCell component="th" scope="row">
                           {type.name}

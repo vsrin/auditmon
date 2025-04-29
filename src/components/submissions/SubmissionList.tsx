@@ -38,7 +38,7 @@ import {
 } from '../../store/slices/submissionSlice';
 import apiService from '../../services/api/apiService';
 import useModeSwitching from '../../hooks/useModeSwitching';
-import { Submission } from '../../types';
+import { Submission, Industry } from '../../types';
 
 // Define type for sort direction
 type Order = 'asc' | 'desc';
@@ -69,10 +69,11 @@ const SubmissionList: React.FC = () => {
   const [order, setOrder] = useState<Order>('desc');
   const [orderBy, setOrderBy] = useState<string>('timestamp');
 
-  // Define sortable columns
+  // Define sortable columns - Added insured.industry.code column
   const headCells: readonly HeadCell[] = [
     { id: 'submissionId', label: 'Submission ID', sortable: true },
     { id: 'insured.name', label: 'Insured Name', sortable: true },
+    { id: 'insured.industry.code', label: 'Industry Code', sortable: true, width: '120px' },
     { id: 'insured.industry.description', label: 'Industry', sortable: true },
     { id: 'timestamp', label: 'Date Received', sortable: true },
     { id: 'status', label: 'Status', sortable: true },
@@ -217,17 +218,27 @@ const SubmissionList: React.FC = () => {
       console.log(`Submissions after status filter: ${result.length}`);
     }
     
-    // Apply search term
+    // Apply search term - Updated to include industry code in search
     if (searchTerm) {
       console.log(`Searching for: ${searchTerm}`);
       
       const term = searchTerm.toLowerCase();
-      result = result.filter(sub => 
-        (sub.submissionId || '').toLowerCase().includes(term) ||
-        (sub.insured?.name || '').toLowerCase().includes(term) ||
-        (sub.insured?.industry?.description || '').toLowerCase().includes(term) ||
-        (sub.broker?.name || '').toLowerCase().includes(term)
-      );
+      result = result.filter(sub => {
+        // Type-safe access with proper type assertions
+        const industryCode = sub.insured?.industry && 
+          (sub.insured.industry as Industry).code !== undefined ? 
+          (sub.insured.industry as Industry).code : '';
+        
+        const industryDesc = sub.insured?.industry?.description || '';
+        
+        return (
+          (sub.submissionId || '').toLowerCase().includes(term) ||
+          (sub.insured?.name || '').toLowerCase().includes(term) ||
+          (industryCode || '').toLowerCase().includes(term) || // Fixed industry code access
+          industryDesc.toLowerCase().includes(term) ||
+          (sub.broker?.name || '').toLowerCase().includes(term)
+        );
+      });
       
       console.log(`Submissions after search filter: ${result.length}`);
     }
@@ -450,23 +461,41 @@ const SubmissionList: React.FC = () => {
             </TableHead>
             <TableBody>
               {filteredSubmissions.length > 0 ? (
-                filteredSubmissions.map((submission) => (
-                  <TableRow 
-                    key={submission.submissionId}
-                    hover
-                    onClick={() => handleRowClick(submission.submissionId)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>{submission.submissionId}</TableCell>
-                    <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
-                    <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
-                    <TableCell>{formatDate(submission.timestamp)}</TableCell>
-                    <TableCell>{getStatusChip(submission.status)}</TableCell>
-                  </TableRow>
-                ))
+                filteredSubmissions.map((submission) => {
+                  // Safe access to industry code with type assertion
+                  const industryCode = submission.insured?.industry && 
+                    (submission.insured.industry as Industry).code;
+                  
+                  return (
+                    <TableRow 
+                      key={submission.submissionId}
+                      hover
+                      onClick={() => handleRowClick(submission.submissionId)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell>{submission.submissionId}</TableCell>
+                      <TableCell>{submission.insured?.name || 'Unknown'}</TableCell>
+                      <TableCell>
+                        {industryCode ? (
+                          <Chip 
+                            label={industryCode} 
+                            size="small" 
+                            variant="outlined" 
+                            color="primary"
+                          />
+                        ) : (
+                          'N/A'
+                        )}
+                      </TableCell>
+                      <TableCell>{submission.insured?.industry?.description || 'Unknown'}</TableCell>
+                      <TableCell>{formatDate(submission.timestamp)}</TableCell>
+                      <TableCell>{getStatusChip(submission.status)}</TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={6} align="center">
                     <Box p={3}>
                       <Typography variant="body1">
                         No submissions match the current filters

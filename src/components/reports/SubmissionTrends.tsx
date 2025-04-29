@@ -25,19 +25,49 @@ import {
   Cell
 } from 'recharts';
 
-interface SubmissionTrendsProps {
-  submissions: any[];
+// Define interfaces for the data structures
+interface TrendDataPoint {
+  date: string;
+  count: number;
 }
 
-const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions }) => {
+interface DistributionItem {
+  name: string;
+  value: number;
+}
+
+interface ReportsData {
+  trendData: TrendDataPoint[];
+  industryDistribution: DistributionItem[];
+  lineDistribution: DistributionItem[];
+  // other properties might be here but we're not using them in this component
+}
+
+interface SubmissionTrendsProps {
+  submissions: any[];
+  reportsData?: ReportsData;
+}
+
+const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions, reportsData }) => {
   // Calculate submission statistics
   const stats = useMemo(() => {
+    // Use enhanced reports data if available
+    if (reportsData && reportsData.trendData && reportsData.industryDistribution && reportsData.lineDistribution) {
+      return {
+        totalSubmissions: submissions.length,
+        byDate: reportsData.trendData,
+        byIndustry: reportsData.industryDistribution.slice(0, 10), // Top 10 industries
+        byLine: reportsData.lineDistribution
+      };
+    }
+
+    // Fall back to calculation from submissions if reports data not available
     if (!submissions || submissions.length === 0) {
       return {
         totalSubmissions: 0,
-        byDate: [],
-        byIndustry: [],
-        byLine: []
+        byDate: [] as TrendDataPoint[],
+        byIndustry: [] as DistributionItem[],
+        byLine: [] as DistributionItem[]
       };
     }
     
@@ -72,7 +102,7 @@ const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions }) => {
     
     // Date data (last 14 days)
     const now = new Date();
-    const dates = [];
+    const dates: TrendDataPoint[] = [];
     for (let i = 13; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
@@ -99,7 +129,7 @@ const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions }) => {
       byIndustry,
       byLine
     };
-  }, [submissions]);
+  }, [submissions, reportsData]);
   
   // Colors for pie charts
   const COLORS = [
@@ -154,7 +184,7 @@ const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions }) => {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={stats.byIndustry}
+                        data={stats.byIndustry.slice(0, 8)} // Top 8 industries for readability
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -166,7 +196,7 @@ const SubmissionTrends: React.FC<SubmissionTrendsProps> = ({ submissions }) => {
                             : `${name}: ${(percent * 100).toFixed(0)}%`
                         }
                       >
-                        {stats.byIndustry.map((entry, index) => (
+                        {stats.byIndustry.slice(0, 8).map((entry: DistributionItem, index: number) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>

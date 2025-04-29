@@ -24,13 +24,43 @@ import {
   Cell
 } from 'recharts';
 
-interface ComplianceStatusReportProps {
-  submissions: any[];
+// Define interfaces for the data structures we're using
+interface ComplianceIssue {
+  name: string;
+  value: number;
 }
 
-const ComplianceStatusReport: React.FC<ComplianceStatusReportProps> = ({ submissions }) => {
+interface ReportsData {
+  complianceDistribution: {
+    compliant: number;
+    atRisk: number;
+    nonCompliant: number;
+  };
+  topComplianceIssues: ComplianceIssue[];
+  // other properties might be here but we're not using them in this component
+}
+
+interface ComplianceStatusReportProps {
+  submissions: any[];
+  reportsData?: ReportsData;
+}
+
+const ComplianceStatusReport: React.FC<ComplianceStatusReportProps> = ({ submissions, reportsData }) => {
   // Calculate compliance statistics
   const stats = useMemo(() => {
+    // Use enhanced reports data if available
+    if (reportsData && reportsData.complianceDistribution && reportsData.topComplianceIssues) {
+      return {
+        totalCount: submissions.length,
+        compliantCount: reportsData.complianceDistribution.compliant,
+        atRiskCount: reportsData.complianceDistribution.atRisk,
+        nonCompliantCount: reportsData.complianceDistribution.nonCompliant,
+        complianceRate: Math.round((reportsData.complianceDistribution.compliant / submissions.length) * 100),
+        topIssues: reportsData.topComplianceIssues
+      };
+    }
+
+    // Fall back to calculation from submissions if reports data not available
     if (!submissions || submissions.length === 0) {
       return {
         totalCount: 0,
@@ -38,7 +68,7 @@ const ComplianceStatusReport: React.FC<ComplianceStatusReportProps> = ({ submiss
         atRiskCount: 0,
         nonCompliantCount: 0,
         complianceRate: 0,
-        topIssues: []
+        topIssues: [] as ComplianceIssue[]
       };
     }
     
@@ -78,7 +108,7 @@ const ComplianceStatusReport: React.FC<ComplianceStatusReportProps> = ({ submiss
       complianceRate,
       topIssues
     };
-  }, [submissions]);
+  }, [submissions, reportsData]);
   
   // Status distribution data for pie chart
   const statusData = [
@@ -219,7 +249,7 @@ const ComplianceStatusReport: React.FC<ComplianceStatusReportProps> = ({ submiss
             <Divider />
             <CardContent>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {stats.topIssues.map((issue, index) => (
+                {stats.topIssues.map((issue: ComplianceIssue, index: number) => (
                   <Chip
                     key={index}
                     label={`${issue.name}: ${issue.value}`}

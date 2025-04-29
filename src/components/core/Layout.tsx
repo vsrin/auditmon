@@ -21,13 +21,13 @@ import {
   Assessment as AssessmentIcon,
   Settings as SettingsIcon,
   Build as BuildIcon,
-  BugReport as BugReportIcon, // Added for debug icon
-  Assignment as AssignmentIcon // Added for Audit Compliance
+  BugReport as BugReportIcon,
+  Assignment as AssignmentIcon,
+  Rule as RuleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux'; // Removed unused dispatch
+import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { Code as CodeIcon } from '@mui/icons-material';
 import ruleEngineProvider from '../../services/rules/ruleEngineProvider';
 
 const drawerWidth = 240;
@@ -48,17 +48,15 @@ const LogoBox = styled(Box)(({ theme }) => ({
   borderBottom: '1px solid rgba(255,255,255,0.1)'
 }));
 
-// Current implementation 
 const Logo = styled('div')(({ theme }) => ({
-    width: 30,
-    height: 30,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: theme.spacing(2)
-  }));
+  width: 30,
+  height: 30,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: theme.spacing(2)
+}));
 
-// Fix: Change approach to use ListItem directly instead of styling it
 const SidebarItem = styled(Box)(({ theme }) => ({
   color: 'rgba(255,255,255,0.7)',
   margin: '4px 0',
@@ -83,13 +81,12 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const theme = useTheme();
-  // Use the isMobile variable to conditionally render components if needed
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
   const navigate = useNavigate();
 
-  // FIXED: Sync the current mode with rule engine provider
+  // Sync the current mode with rule engine provider
   useEffect(() => {
     if (ruleEngineProvider.setDemoMode) {
       console.log("Layout - Setting rule engine demo mode:", isDemoMode);
@@ -111,9 +108,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const drawer = (
     <SidebarWrapper>
-        <LogoBox>
+      <LogoBox>
         <Logo>
-             <CodeIcon sx={{ color: '#D3D3D3' }} />
+          <BuildIcon sx={{ color: '#D3D3D3' }} />
         </Logo>
         <Box>
           <Typography variant="subtitle1" fontWeight="bold">Insurance Monitor</Typography>
@@ -124,7 +121,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Divider sx={{ backgroundColor: 'rgba(255,255,255,0.1)' }} />
       
       <Box sx={{ p: 1 }}>
-        {/* Navigation Items - Updated to use navigate instead of window.location */}
+        {/* Navigation Items */}
         <SidebarItem 
           onClick={() => navigateTo('/')}
         >
@@ -143,16 +140,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography>Submissions</Typography>
         </SidebarItem>
         
-        <SidebarItem
-          onClick={() => navigateTo('/reports')}
-        >
-          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
-            <AssessmentIcon fontSize="small" />
-          </Box>
-          <Typography>Reports</Typography>
-        </SidebarItem>
-        
-        {/* Added new Audit Compliance navigation item */}
+        {/* Audit Compliance navigation item */}
         <SidebarItem
           onClick={() => navigateTo('/audit-compliance')}
         >
@@ -160,6 +148,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <AssignmentIcon fontSize="small" />
           </Box>
           <Typography>Audit Compliance</Typography>
+        </SidebarItem>
+        
+        {/* Rule Engine navigation item */}
+        <SidebarItem
+          onClick={() => navigateTo('/rule-engine')}
+        >
+          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
+            <RuleIcon fontSize="small" />
+          </Box>
+          <Typography>Rule Engine</Typography>
+        </SidebarItem>
+        
+        {/* Reports navigation item - Moved down in the list */}
+        <SidebarItem
+          onClick={() => navigateTo('/reports')}
+        >
+          <Box sx={{ display: 'flex', minWidth: 40, color: 'inherit' }}>
+            <AssessmentIcon fontSize="small" />
+          </Box>
+          <Typography>Reports</Typography>
         </SidebarItem>
       </Box>
       
@@ -184,7 +192,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography>Settings</Typography>
         </SidebarItem>
         
-        {/* Added new API Debug navigation item */}
+        {/* API Debug navigation item */}
         <SidebarItem
           onClick={() => navigateTo('/api-debug')}
         >
@@ -232,12 +240,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             noWrap 
             component="div" 
             sx={{ flexGrow: 1, cursor: 'pointer' }}
-            onClick={() => navigateTo('/')} // Make the title clickable to go home
+            onClick={() => navigateTo('/')}
           >
             Intake - Audit Compliance Monitoring
           </Typography>
           
-          {/* FIXED: Mode indicator chip with more distinct styling */}
           <Chip
             label={isDemoMode ? 'Demo Mode' : 'Live Mode'}
             color={isDemoMode ? 'default' : 'primary'}

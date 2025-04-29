@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { store } from './store'; // Fixed: Import store as named export
+import { store } from './store';
 import theme from './theme';
 
 // Layout
@@ -16,11 +16,11 @@ import SubmissionList from './components/submissions/SubmissionList';
 import SubmissionDetail from './components/submissions/SubmissionDetail';
 import Settings from './components/settings/Settings';
 import ConfigurationUtility from './components/config/ConfigurationUtility';
-import Alerts from './components/alerts/Alerts';
-import RuleEngineDemo from './services/rules/RuleEngineDemo'; // Import RuleEngineDemo component
-import ApiDebugPage from './components/debug/ApiDebugPage'; // Import the new API Debug Page
+// Remove Alerts import
+import RuleEngineDemo from './components/rule-engine/RuleEngineDemo'; // Import RuleEngineDemo component
+import ApiDebugPage from './components/debug/ApiDebugPage';
 import AuditComplianceDashboard from './components/audit/AuditComplianceDashboard';
-
+import Reports from './components/reports/Reports';
 
 // Configure API service on startup
 import apiService from './services/api/apiService';
@@ -59,11 +59,12 @@ const AppContent: React.FC = () => {
         <Route path="/submissions/:id" element={<SubmissionDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/config" element={<ConfigurationUtility />} />
-        <Route path="/alerts" element={<Alerts />} />
+        {/* Removed the /alerts route */}
         <Route path="/rule-engine" element={<RuleEngineDemo />} />
-        <Route path="/api-debug" element={<ApiDebugPage />} /> {/* Add the API Debug Page route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/api-debug" element={<ApiDebugPage />} />
         <Route path="/audit-compliance" element={<AuditComplianceDashboard />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
   );

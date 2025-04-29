@@ -1,4 +1,5 @@
-// src/services/rules/RuleEngineDemo.tsx
+// src/components/rule-engine/RuleEngineDemo.tsx
+// This component is moved from services/rules/RuleEngineDemo.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,

@@ -8,7 +8,8 @@ import {
   Card,
   CardContent,
   CircularProgress,
-  Alert
+  Alert,
+  Chip
 } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
@@ -16,6 +17,7 @@ import apiService from '../../services/api/apiService';
 import ComplianceStatusReport from './ComplianceStatusReport';
 import DocumentCompleteness from './DocumentCompleteness';
 import SubmissionTrends from './SubmissionTrends';
+import mockDataExports from '../../services/mock/mockData'; // Import mock data
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -49,6 +51,7 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isDemoMode, apiEndpoint } = useSelector((state: RootState) => state.config);
+  const [reportsData, setReportsData] = useState<any>(null);
   
   // Configure API service based on current settings
   useEffect(() => {
@@ -56,7 +59,7 @@ const Reports: React.FC = () => {
     apiService.setApiEndpoint(apiEndpoint);
   }, [isDemoMode, apiEndpoint]);
   
-  // Load submissions data
+  // Load submissions data and reports data
   useEffect(() => {
     const loadSubmissions = async () => {
       setLoading(true);
@@ -65,6 +68,16 @@ const Reports: React.FC = () => {
       try {
         const data = await apiService.getSubmissions();
         setSubmissions(data);
+        
+        // Load enhanced reports data for demo mode
+        if (isDemoMode && mockDataExports.getReportsData) {
+          setReportsData(mockDataExports.getReportsData());
+        } else {
+          // In live mode, reportsData will be null and the components
+          // will calculate metrics from the raw submissions data
+          setReportsData(null);
+        }
+        
         setLoading(false);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -76,16 +89,22 @@ const Reports: React.FC = () => {
     loadSubmissions();
   }, [isDemoMode]);
   
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
   
   return (
     <div>
-      <Box display="flex" alignItems="center" mb={3}>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
         <Typography variant="h5" component="h1">
           Analytics & Reporting
         </Typography>
+        
+        <Chip 
+          label={isDemoMode ? 'Demo Mode' : 'Live Mode'} 
+          color={isDemoMode ? 'default' : 'primary'}
+          size="small"
+        />
       </Box>
       
       {loading && (
@@ -126,15 +145,24 @@ const Reports: React.FC = () => {
           </Box>
           
           <TabPanel value={tabValue} index={0}>
-            <ComplianceStatusReport submissions={submissions} />
+            <ComplianceStatusReport 
+              submissions={submissions} 
+              reportsData={reportsData}
+            />
           </TabPanel>
           
           <TabPanel value={tabValue} index={1}>
-            <DocumentCompleteness submissions={submissions} />
+            <DocumentCompleteness 
+              submissions={submissions} 
+              reportsData={reportsData}
+            />
           </TabPanel>
           
           <TabPanel value={tabValue} index={2}>
-            <SubmissionTrends submissions={submissions} />
+            <SubmissionTrends 
+              submissions={submissions}
+              reportsData={reportsData}
+            />
           </TabPanel>
         </>
       )}
