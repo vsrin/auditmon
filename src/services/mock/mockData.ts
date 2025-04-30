@@ -6,6 +6,7 @@ import {
   ComplianceStatus 
 } from '../../types/auditCompliance';
 import { lifecycleStages } from '../../services/rules/auditQuestions';
+import ruleEngineProvider from '../rules/ruleEngineProvider';
 
 // Configure the exact counts to match dashboard metrics
 const TOTAL_SUBMISSIONS = 42;
@@ -15,24 +16,17 @@ const AT_RISK_COUNT = 10; // ~24%
 const NON_COMPLIANT_COUNT = 4; // ~9%
 
 // Industry codes and descriptions
-// IMPORTANT: We now explicitly define which industries are restricted or declined
-// This ensures consistent risk appetite compliance across all submissions
 const industries = [
-  // Compliant industries (in appetite)
-  { code: '2834', description: 'Pharmaceutical Manufacturing', riskAppetite: 'Standard' },
-  { code: '8731', description: 'Research and Development', riskAppetite: 'Standard' },
-  { code: '6211', description: 'Healthcare', riskAppetite: 'Standard' },
-  { code: '5812', description: 'Restaurants', riskAppetite: 'Standard' },
-  { code: '4724', description: 'Travel Agency', riskAppetite: 'Standard' },
-  { code: '5411', description: 'Legal Services', riskAppetite: 'Standard' },
-  
-  // At Risk industries (restricted appetite)
-  { code: '1531', description: 'Construction', riskAppetite: 'Restricted' },
-  { code: '7371', description: 'Technology Services', riskAppetite: 'Restricted' },
-  
-  // Non-Compliant industries (declined)
-  { code: '6531', description: 'Real Estate', riskAppetite: 'Declined' },
-  { code: '3579', description: 'Office Equipment', riskAppetite: 'Declined' }
+  { code: '6531', description: 'Real Estate' },
+  { code: '7371', description: 'Technology Services' },
+  { code: '3579', description: 'Office Equipment' },
+  { code: '2834', description: 'Pharmaceutical Manufacturing' },
+  { code: '1531', description: 'Construction' },
+  { code: '8731', description: 'Research and Development' },
+  { code: '4724', description: 'Travel Agency' },
+  { code: '5411', description: 'Legal Services' },
+  { code: '6211', description: 'Healthcare' },
+  { code: '5812', description: 'Restaurants' }
 ];
 
 // Document types
@@ -46,38 +40,64 @@ const documentTypes = [
   'SOV'
 ];
 
-// Lines of business
-const linesOfBusiness = [
-  'Property', 
-  'General Liability', 
-  'Workers Compensation', 
-  'Professional Liability'
+// Realistic company names for demo data
+const companyNames = [
+  'Horizon Properties LLC',
+  'TechVision Systems Inc.',
+  'Pacific Office Solutions',
+  'MediPharm Laboratories',
+  'Cornerstone Construction Group',
+  'Innovate Research Partners',
+  'Worldwide Travel Associates',
+  'Montgomery & Associates Legal',
+  'Wellness Medical Center',
+  'Bistro Restaurant Group',
+  'Riverfront Development Corp',
+  'Synergy Software Solutions',
+  'Premier Equipment Supply',
+  'BioScience Innovations',
+  'Highland Builders Inc.',
+  'Quantum Analytics Group',
+  'Elite Travel Services',
+  'Justice Partners LLP',
+  'Community Health Network',
+  'Urban Dining Concepts',
+  'Atlas Property Management',
+  'Digital Frontier Technologies',
+  'Modern Office Interiors',
+  'Advanced Medical Research',
+  'Continental Construction LLC',
+  'Discovery Research Institute',
+  'Voyager Travel Consultants',
+  'Thompson Legal Associates',
+  'Integrated Health Systems',
+  'Gourmet Hospitality Group',
+  'Metropolitan Housing Corp',
+  'Cloud Networks Inc.',
+  'Workspace Solutions LLC',
+  'Nova Pharmaceutical Group',
+  'Foundation Building Services',
+  'Catalyst Research Partners',
+  'Global Travel Specialists',
+  'Addison Law Partners',
+  'Precision Healthcare Group',
+  'Savory Restaurant Holdings',
+  'Landmark Properties Trust',
+  'Nexus Technology Solutions'
 ];
 
-// Company name components for more realistic names
-const companyNamePrefixes = [
-  'Apex', 'Blue Ridge', 'Cascade', 'Delta', 'Evergreen', 'Frontier', 
-  'Golden Gate', 'Highland', 'Integrated', 'Keystone', 'Landmark', 
-  'Meridian', 'Northern', 'Oceanview', 'Pioneer', 'Quantum', 
-  'Redwood', 'Summit', 'Titan', 'United', 'Venture', 'Western', 
-  'Xenith', 'Yellowstone', 'Zenith'
-];
-
-const companyNameTypes = [
-  'Industries', 'Solutions', 'Technologies', 'Systems', 'Enterprises', 
-  'Corporation', 'Partners', 'Group', 'Associates', 'Global', 
-  'Inc.', 'LLC', 'Holdings', 'Ventures', 'International', 
-  'Consolidated', 'Manufacturing', 'Services', 'Consulting', 'Properties'
-];
-
-// Broker firm names for more realism
-const brokerFirmNames = [
-  'Willis Towers Watson', 'Marsh & McLennan', 'Aon Risk Solutions',
-  'Arthur J. Gallagher', 'USI Insurance', 'HUB International',
-  'Brown & Brown', 'NFP Corp', 'Lockton Companies', 'Alliant Insurance',
-  'Acrisure LLC', 'Woodruff Sawyer', 'Risk Strategies', 'Higginbotham',
-  'BXS Insurance', 'McGriff', 'Oswald Companies', 'Hylant Group',
-  'AssuredPartners', 'TrueNorth Companies'
+// Broker names
+const brokerNames = [
+  'Smith & Associates',
+  'Global Risk Partners',
+  'Allstate Insurance',
+  'Meridian Brokerage',
+  'Guardian Insurance',
+  'Pinnacle Risk Solutions',
+  'Heritage Insurance Group',
+  'Liberty Risk Management',
+  'Alliance Insurance Partners',
+  'Safeguard Insurance Group'
 ];
 
 // Status distribution using NON_COMPLIANT_COUNT to make ESLint happy
@@ -93,133 +113,60 @@ const getStatusForIndex = (index: number): string => {
   }
 };
 
-// Generate a more realistic timestamp with better distribution
-const generateTimestampForIndex = (index: number): string => {
-  const date = new Date();
+// Generate realistic, varied timestamps for demo data
+const generateRealisticTimestamp = (index: number): string => {
+  const now = new Date();
   
-  // Create a more varied distribution over the last 90 days
-  // Use a combination of techniques to spread dates out more naturally
+  // Create a variety of submission dates:
+  // - More recent submissions (last 7 days): 40%
+  // - Medium-term submissions (8-30 days): 40%
+  // - Older submissions (31-90 days): 20%
   
-  // Base spread - roughly last 3 months but with clustering
-  let dayOffset = 0;
+  let dayOffset: number;
   
-  // Use different distribution patterns based on index ranges
-  if (index < TOTAL_SUBMISSIONS * 0.2) {
-    // Most recent 20% of submissions - within last 2 weeks
-    dayOffset = Math.floor(Math.random() * 14);
-  } else if (index < TOTAL_SUBMISSIONS * 0.5) {
-    // Next 30% - between 2 weeks and 1 month ago
-    dayOffset = 14 + Math.floor(Math.random() * 16);
-  } else if (index < TOTAL_SUBMISSIONS * 0.8) {
-    // Next 30% - between 1 and 2 months ago
-    dayOffset = 30 + Math.floor(Math.random() * 30);
+  if (index % 10 < 4) {
+    // More recent (0-7 days ago)
+    dayOffset = index % 7;
+  } else if (index % 10 < 8) {
+    // Medium-term (8-30 days ago)
+    dayOffset = 8 + (index % 23);
   } else {
-    // Oldest 20% - between 2 and 3 months ago
-    dayOffset = 60 + Math.floor(Math.random() * 30);
+    // Older (31-90 days ago)
+    dayOffset = 31 + (index % 60);
   }
   
-  // Add some slight clustering where submissions might come in batches
-  // Every third submission comes in a cluster
-  if (index % 3 === 0) {
-    // Adjust to be within 1-2 days of a related submission
-    dayOffset = Math.max(0, dayOffset - (index % 2));
-  }
+  // Add some hour/minute variation
+  const hourOffset = (index * 2) % 24;
+  const minuteOffset = (index * 7) % 60;
   
+  const date = new Date(now);
   date.setDate(date.getDate() - dayOffset);
-  
-  // Add time component - spread throughout the day
-  date.setHours(9 + (index % 8)); // Business hours 9am-5pm
-  date.setMinutes((index * 17) % 60); // Spread minutes
+  date.setHours(9 + hourOffset); // Business hours (9am - 9pm)
+  date.setMinutes(minuteOffset);
   
   return date.toISOString();
 };
 
-// Generate a realistic company name
-const generateCompanyName = (index: number): string => {
-  // Use a deterministic but seemingly random approach based on index
-  const prefixIndex = (index * 3) % companyNamePrefixes.length;
-  const typeIndex = (index * 7) % companyNameTypes.length;
-  
-  // For some names, add an industry-specific term
-  let industryTerm = '';
-  if (index % 5 === 0) {
-    const industryTerms = [
-      'Healthcare', 'Financial', 'Construction', 'Logistics', 
-      'Manufacturing', 'Retail', 'Energy', 'Automotive', 'Media'
-    ];
-    industryTerm = ' ' + industryTerms[index % industryTerms.length];
-  }
-  
-  return `${companyNamePrefixes[prefixIndex]}${industryTerm} ${companyNameTypes[typeIndex]}`;
-};
-
-// Generate a broker name
-const getBrokerName = (index: number): string => {
-  const firmIndex = index % brokerFirmNames.length;
-  return brokerFirmNames[firmIndex];
-};
-
-// Function to ensure that the industry used in a submission matches the status
-// This ensures NAICS risk appetite is consistent with submission status
-const getIndustryForSubmission = (index: number, status: string): typeof industries[0] => {
-  if (status === 'Compliant') {
-    // For compliant submissions, use only compliant industries
-    const compliantIndustries = industries.filter(i => i.riskAppetite === 'Standard');
-    return compliantIndustries[index % compliantIndustries.length];
-  } else if (status === 'At Risk') {
-    // For at-risk submissions, either use restricted industries or create other compliance issues
-    const atRiskChoices = [
-      // Use restricted industry 70% of the time
-      ...Array(7).fill('restricted-industry'),
-      // Use other compliance issues 30% of the time
-      ...Array(3).fill('other-issue')
-    ];
-    
-    const choice = atRiskChoices[index % atRiskChoices.length];
-    
-    if (choice === 'restricted-industry') {
-      const restrictedIndustries = industries.filter(i => i.riskAppetite === 'Restricted');
-      return restrictedIndustries[index % restrictedIndustries.length];
-    } else {
-      // Use a compliant industry but will have other compliance issues
-      const compliantIndustries = industries.filter(i => i.riskAppetite === 'Standard');
-      return compliantIndustries[index % compliantIndustries.length];
-    }
-  } else {
-    // For non-compliant submissions, mostly use declined industries
-    const nonCompliantChoices = [
-      // Use declined industry 80% of the time
-      ...Array(8).fill('declined-industry'),
-      // Use other compliance issues 20% of the time
-      ...Array(2).fill('other-issue')
-    ];
-    
-    const choice = nonCompliantChoices[index % nonCompliantChoices.length];
-    
-    if (choice === 'declined-industry') {
-      const declinedIndustries = industries.filter(i => i.riskAppetite === 'Declined');
-      return declinedIndustries[index % declinedIndustries.length];
-    } else {
-      // Use a compliant industry but will have other severe compliance issues
-      const compliantIndustries = industries.filter(i => i.riskAppetite === 'Standard');
-      return compliantIndustries[index % compliantIndustries.length];
-    }
-  }
-};
-
-// Generate mock submissions - ENSURE CONSISTENT RISK APPETITE
+// Generate mock submissions with realistic data
 export const mockSubmissions: Submission[] = Array.from({ length: TOTAL_SUBMISSIONS }, (_, index) => {
-  // Determine status based on position to match counts
-  const status = getStatusForIndex(index);
-  
-  // Select industry for this submission that's consistent with its status
-  const industry = getIndustryForSubmission(index, status);
+  // Select industry for this submission
+  const industryIndex = index % industries.length;
+  const industry = industries[industryIndex];
   
   // Generate submission ID
   const submissionId = `SUB-${100000 + index}`;
   
-  // Generate timestamp with better distribution
-  const timestamp = generateTimestampForIndex(index);
+  // Determine status based on position to match counts
+  const status = getStatusForIndex(index);
+  
+  // Generate timestamp with realistic distribution
+  const timestamp = generateRealisticTimestamp(index);
+  
+  // Select company name
+  const companyName = companyNames[index % companyNames.length];
+  
+  // Select broker
+  const brokerIndex = index % brokerNames.length;
   
   // Create submission object
   return {
@@ -227,12 +174,12 @@ export const mockSubmissions: Submission[] = Array.from({ length: TOTAL_SUBMISSI
     timestamp,
     status,
     broker: {
-      name: getBrokerName(index),
-      email: `broker${(index % 10) + 1}@${brokerFirmNames[index % brokerFirmNames.length].toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
-      code: `BR-${1000 + (index % 10)}`
+      name: brokerNames[brokerIndex],
+      email: `broker@${brokerNames[brokerIndex].toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+      code: `BR-${1000 + brokerIndex}`
     },
     insured: {
-      name: generateCompanyName(index),
+      name: companyName,
       industry: {
         code: industry.code,
         description: industry.description
@@ -261,32 +208,129 @@ const createDocumentsForSubmission = (submissionId: string, index: number) => {
       id: `doc-${index * 10 + docIndex}`,
       name: `${documentTypes[documentTypeIndex]} - ${submissionId}`,
       type: documentTypes[documentTypeIndex],
-      status: docIndex === 0 ? 'processed' : (docIndex === 1 ? 'pending' : 'failed'),
+      status: docIndex === 0 ? 'processed' : (docIndex === 1 ? 'pending' : 'error'),
       size: 100000 + (docIndex * 50000) // Document size in bytes
     };
   });
 };
 
-// Helper function to determine if a submission has risk appetite issues
-const hasRiskAppetiteIssues = (submission: Submission): { hasIssue: boolean, severity: 'attention' | 'non-compliant' } => {
-  // Get the industry from the submission
-  const industryCode = submission.insured?.industry?.code;
-  if (!industryCode) return { hasIssue: false, severity: 'attention' };
+// Check if a submission's industry is restricted by the current rule engine settings
+const isIndustryRestricted = (industryCode?: string): boolean => {
+  if (!industryCode) return false;
   
-  // Find the industry in our industry list
-  const industry = industries.find(i => i.code === industryCode);
-  if (!industry) return { hasIssue: false, severity: 'attention' };
-  
-  if (industry.riskAppetite === 'Declined') {
-    return { hasIssue: true, severity: 'non-compliant' };
-  } else if (industry.riskAppetite === 'Restricted') {
-    return { hasIssue: true, severity: 'attention' };
-  } else {
-    return { hasIssue: false, severity: 'attention' };
+  if (!ruleEngineProvider || !ruleEngineProvider.isNaicsRuleEnabled) {
+    return false;
   }
+  
+  // Check if the rule is enabled first
+  const isRuleEnabled = ruleEngineProvider.isNaicsRuleEnabled();
+  if (!isRuleEnabled) return false;
+  
+  // Get the current restricted NAICS codes
+  const restrictedCodes = ruleEngineProvider.getRestrictedNaicsCodes();
+  return restrictedCodes.includes(industryCode);
 };
 
-// Function to get detailed submission by ID - IMPROVED FOR CONSISTENT COMPLIANCE
+// Determine the live status based on rule engine state
+const getLiveComplianceStatus = (submission: Submission): string => {
+  // Check if the submission's industry is restricted
+  if (isIndustryRestricted(submission.insured?.industry?.code)) {
+    return 'Non-Compliant';
+  }
+  
+  // If not restricted by industry, use original status or default to Compliant
+  return submission.status || 'Compliant';
+};
+
+// Generate compliance checks based on current rule engine state and submission
+const generateComplianceChecks = (submission: Submission, liveStatus: string): ComplianceCheck[] => {
+  const status = liveStatus.toLowerCase();
+  const checks: ComplianceCheck[] = [];
+  
+  // Document Completeness - Include for all submissions
+  checks.push({
+    checkId: 'DOC-001',
+    category: 'Document Completeness',
+    status: status === 'compliant' ? 'compliant' : 'attention',
+    findings: status === 'compliant' 
+      ? 'All required documents have been provided.' 
+      : 'Missing or incomplete documentation detected.',
+    timestamp: submission.timestamp,
+    dataPoints: {
+      requiredDocuments: 'Financial Statements, SOV, Application',
+      providedDocuments: status === 'compliant' ? 'Financial Statements, SOV, Application' : 'Financial Statements, Application'
+    }
+  });
+  
+  // Risk Appetite - Directly tied to industry restrictions
+  const industryCode = submission.insured?.industry?.code;
+  const isRestricted = isIndustryRestricted(industryCode);
+  
+  checks.push({
+    checkId: 'RISK-001',
+    category: 'Risk Appetite',
+    // Status is 'non-compliant' if industry is restricted
+    status: isRestricted ? 'non-compliant' : (status === 'at risk' ? 'attention' : 'compliant'),
+    findings: isRestricted
+      ? `${submission.insured?.industry?.description || 'Unknown Industry'} is on the restricted industry list. This submission is outside of risk appetite.`
+      : status === 'at risk'
+        ? `${submission.insured?.industry?.description || 'Unknown Industry'} requires additional review for risk appetite.`
+        : `${submission.insured?.industry?.description || 'Unknown Industry'} is within appetite for the requested lines of business.`,
+    timestamp: submission.timestamp,
+    dataPoints: {
+      industryCode: submission.insured?.industry?.code || 'Unknown',
+      riskAppetite: isRestricted ? 'Declined' : (status === 'at risk' ? 'Restricted' : 'Standard')
+    }
+  });
+  
+  // Loss History - Include for at risk and non-compliant submissions
+  if (status !== 'compliant') {
+    checks.push({
+      checkId: 'LOSS-001',
+      category: 'Loss History',
+      status: status === 'at risk' ? 'attention' : 'non-compliant',
+      findings: 'Loss history indicates potential underwriting concerns.',
+      timestamp: submission.timestamp,
+      dataPoints: {
+        lossRatio: status === 'at risk' ? '65%' : '85%',
+        lossCount: status === 'at risk' ? '3' : '7',
+        largestLoss: status === 'at risk' ? '$125,000' : '$450,000'
+      }
+    });
+  }
+  
+  // Additional check for non-compliant submissions not caused by restricted industry
+  if (status === 'non-compliant' && !isRestricted) {
+    checks.push({
+      checkId: 'UW-001',
+      category: 'Underwriting Guidelines',
+      status: 'non-compliant',
+      findings: 'Submission does not meet underwriting guidelines for this line of business.',
+      timestamp: submission.timestamp,
+      dataPoints: {
+        guidelines: 'Standard Property Guidelines',
+        exceptions: '3',
+        severity: 'High'
+      }
+    });
+  }
+  
+  return checks;
+};
+
+// Predefined lines of business
+const linesOfBusiness = [
+  'Property', 
+  'General Liability', 
+  'Workers Compensation', 
+  'Professional Liability',
+  'Cyber Liability',
+  'Directors & Officers',
+  'Employment Practices',
+  'Umbrella'
+];
+
+// Function to get detailed submission by ID - WITH LIVE RULE ENGINE INTEGRATION
 export const getMockSubmissionDetail = (id: string): SubmissionDetail | null => {
   // Find the base submission
   const baseSubmission = mockSubmissions.find(sub => sub.submissionId === id);
@@ -298,98 +342,32 @@ export const getMockSubmissionDetail = (id: string): SubmissionDetail | null => 
   // Get index for document generation
   const index = mockSubmissions.indexOf(baseSubmission);
   
+  // Determine the current compliance status based on rule engine
+  const liveStatus = getLiveComplianceStatus(baseSubmission);
+  
+  // Select lines of business based on index for variety but deterministic results
+  const selectedLines = [];
+  const lineCount = 1 + (index % 4); // 1 to 4 lines
+  
+  for (let i = 0; i < lineCount; i++) {
+    const lineIndex = (index + i) % linesOfBusiness.length;
+    selectedLines.push(linesOfBusiness[lineIndex]);
+  }
+  
   // Create detailed submission
   const detailedSubmission: SubmissionDetail = {
     ...baseSubmission,
+    // Update status based on current rule engine state
+    status: liveStatus,
     coverage: {
-      lines: ['Property', 'General Liability', 'Workers Compensation', 'Professional Liability'].slice(0, 1 + (index % 3)),
+      lines: selectedLines,
       effectiveDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
       expirationDate: new Date(new Date().getFullYear() + 1, new Date().getMonth() + 1, 1).toISOString()
     },
     documents: createDocumentsForSubmission(id, index),
-    complianceChecks: [] // Will be populated below based on status
+    // Generate compliance checks based on current rule engine state
+    complianceChecks: generateComplianceChecks(baseSubmission, liveStatus)
   };
-  
-  // Generate compliance checks based on submission status
-  const status = baseSubmission.status?.toLowerCase() || 'compliant';
-  let checks: ComplianceCheck[] = [];
-  
-  // Always include document completeness check
-  checks.push({
-    checkId: 'DOC-001',
-    category: 'Document Completeness',
-    status: status === 'compliant' ? 'compliant' : 'attention',
-    findings: status === 'compliant' 
-      ? 'All required documents have been provided.' 
-      : 'Missing or incomplete documentation detected.',
-    timestamp: baseSubmission.timestamp,
-    dataPoints: {
-      requiredDocuments: 'Financial Statements, SOV, Application',
-      providedDocuments: status === 'compliant' ? 'Financial Statements, SOV, Application' : 'Financial Statements, Application'
-    }
-  });
-  
-  // Check for risk appetite issues - CONSISTENT WITH NAICS CODE
-  const riskAppetiteIssue = hasRiskAppetiteIssues(baseSubmission);
-  checks.push({
-    checkId: 'RISK-001',
-    category: 'Risk Appetite',
-    status: riskAppetiteIssue.hasIssue ? riskAppetiteIssue.severity : 'compliant',
-    findings: !riskAppetiteIssue.hasIssue
-      ? `${baseSubmission.insured?.industry?.description || 'Unknown Industry'} is within appetite for the requested lines of business.`
-      : `${baseSubmission.insured?.industry?.description || 'Unknown Industry'} has risk factors that require additional review.`,
-    timestamp: baseSubmission.timestamp,
-    dataPoints: {
-      industryCode: baseSubmission.insured?.industry?.code || 'Unknown',
-      // Get the riskAppetite value from the industry definition
-      riskAppetite: industries.find(i => i.code === baseSubmission.insured?.industry?.code)?.riskAppetite || 'Unknown'
-    }
-  });
-  
-  // For At Risk and Non-Compliant statuses, add additional compliance issues as needed
-  if (status !== 'compliant') {
-    // If the submission is not compliant due to industry, we already have that covered above
-    // We might need to add other compliance issues, especially if the industry is actually in appetite
-    
-    // If risk appetite is actually compliant but status is not, add other compliance issues
-    const industryHasIssues = riskAppetiteIssue.hasIssue;
-    
-    // Add loss history check if status is at risk or non-compliant
-    checks.push({
-      checkId: 'LOSS-001',
-      category: 'Loss History',
-      // If industry itself doesn't cause issues, make loss history align with overall status
-      status: industryHasIssues ? 'compliant' : (status === 'at risk' ? 'attention' : 'non-compliant'),
-      findings: industryHasIssues 
-        ? 'Loss history is within acceptable parameters.'
-        : 'Loss history indicates potential underwriting concerns.',
-      timestamp: baseSubmission.timestamp,
-      dataPoints: {
-        lossRatio: industryHasIssues ? '35%' : (status === 'at risk' ? '65%' : '85%'),
-        lossCount: industryHasIssues ? '1' : (status === 'at risk' ? '3' : '7'),
-        largestLoss: industryHasIssues ? '$50,000' : (status === 'at risk' ? '$125,000' : '$450,000')
-      }
-    });
-    
-    // For non-compliant submissions that aren't due to industry, add severe underwriting issues
-    if (status === 'non-compliant' && !industryHasIssues) {
-      checks.push({
-        checkId: 'UW-001',
-        category: 'Underwriting Guidelines',
-        status: 'non-compliant',
-        findings: 'Submission does not meet underwriting guidelines for this line of business.',
-        timestamp: baseSubmission.timestamp,
-        dataPoints: {
-          guidelines: 'Standard Property Guidelines',
-          exceptions: '3',
-          severity: 'High'
-        }
-      });
-    }
-  }
-  
-  // Store checks in the detailed submission
-  detailedSubmission.complianceChecks = checks;
   
   return detailedSubmission;
 };
@@ -402,7 +380,9 @@ export const getMockSubmissionDetail = (id: string): SubmissionDetail | null => 
 export const getMockAuditComplianceStatus = (submissionId: string): AuditComplianceStatus => {
   // Find the base submission to use its status
   const baseSubmission = mockSubmissions.find(sub => sub.submissionId === submissionId);
-  const baseStatus = baseSubmission?.status?.toLowerCase() || 'compliant';
+  
+  // Get the live status based on current rule engine state
+  const liveStatus = baseSubmission ? getLiveComplianceStatus(baseSubmission).toLowerCase() : 'compliant';
   
   // Generate a deterministic but seemingly random status based on submission ID
   const seed = submissionId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -415,10 +395,10 @@ export const getMockAuditComplianceStatus = (submissionId: string): AuditComplia
       
       // Base status on submission status but with some variation
       let status: ComplianceStatus;
-      if (baseStatus === 'compliant') {
+      if (liveStatus === 'compliant') {
         // Mostly compliant with some at-risk
         status = combinedSeed < 85 ? 'compliant' : 'at-risk';
-      } else if (baseStatus === 'at risk') {
+      } else if (liveStatus === 'at risk') {
         // Mix of compliant, at-risk, and some non-compliant
         if (combinedSeed < 40) {
           status = 'compliant';
@@ -430,6 +410,16 @@ export const getMockAuditComplianceStatus = (submissionId: string): AuditComplia
       } else {
         // Mostly non-compliant with some at-risk
         status = combinedSeed < 30 ? 'at-risk' : 'non-compliant';
+      }
+      
+      // Special case for risk appetite question when industry is restricted
+      if (
+        baseSubmission && 
+        isIndustryRestricted(baseSubmission.insured?.industry?.code) && 
+        (question.text.toLowerCase().includes('risk appetite') || 
+         question.text.toLowerCase().includes('underwriting appetite'))
+      ) {
+        status = 'non-compliant';
       }
       
       // Generate findings based on status
@@ -490,14 +480,35 @@ export const getMockAuditComplianceStatus = (submissionId: string): AuditComplia
 
 // Generate mock compliance metrics
 export const getMockComplianceMetrics = () => {
+  // Count submissions in each category based on current rule engine state
+  const submissionStatusCounts = {
+    compliant: 0,
+    'at-risk': 0,
+    'non-compliant': 0,
+    'not-evaluated': 0
+  };
+  
+  mockSubmissions.forEach(sub => {
+    const status = getLiveComplianceStatus(sub).toLowerCase();
+    if (status === 'compliant') {
+      submissionStatusCounts.compliant++;
+    } else if (status === 'at risk') {
+      submissionStatusCounts['at-risk']++;
+    } else if (status === 'non-compliant') {
+      submissionStatusCounts['non-compliant']++;
+    } else {
+      submissionStatusCounts['not-evaluated']++;
+    }
+  });
+  
   const stageMetrics: Record<LifecycleStage, Record<ComplianceStatus, number>> = {} as any;
   const questionMetrics: Record<string, Record<ComplianceStatus, number>> = {};
   
-  // Calculate percentages based on our existing submission counts
+  // Calculate percentages based on our current counts
   const total = TOTAL_SUBMISSIONS;
-  const compliantPct = COMPLIANT_COUNT / total;
-  const atRiskPct = AT_RISK_COUNT / total;
-  const nonCompliantPct = NON_COMPLIANT_COUNT / total;
+  const compliantPct = submissionStatusCounts.compliant / total;
+  const atRiskPct = submissionStatusCounts['at-risk'] / total;
+  const nonCompliantPct = submissionStatusCounts['non-compliant'] / total;
   
   // Initialize metrics for each stage
   lifecycleStages.forEach(stage => {
@@ -538,14 +549,26 @@ export const getMockComplianceMetrics = () => {
   return { stageMetrics, questionMetrics };
 };
 
-// Generate data for reports
+// Function to generate reports data for the Reports component
 export const getReportsData = () => {
-  // 1. Compliance Status Distribution
+  // 1. Compliance Status Distribution based on current rule engine state
   const complianceDistribution = {
-    compliant: COMPLIANT_COUNT,
-    atRisk: AT_RISK_COUNT,
-    nonCompliant: NON_COMPLIANT_COUNT
+    compliant: 0,
+    atRisk: 0,
+    nonCompliant: 0
   };
+  
+  // Count submissions in each category based on current rule engine state
+  mockSubmissions.forEach(sub => {
+    const liveStatus = getLiveComplianceStatus(sub).toLowerCase();
+    if (liveStatus === 'compliant') {
+      complianceDistribution.compliant++;
+    } else if (liveStatus === 'at risk') {
+      complianceDistribution.atRisk++;
+    } else if (liveStatus === 'non-compliant') {
+      complianceDistribution.nonCompliant++;
+    }
+  });
   
   // 2. Document Status Distribution
   const documentStatusCounts = {
@@ -559,8 +582,9 @@ export const getReportsData = () => {
     const detail = getMockSubmissionDetail(sub.submissionId);
     if (detail && detail.documents) {
       detail.documents.forEach(doc => {
-        if (doc.status === 'processed') documentStatusCounts.processed++;
-        else if (doc.status === 'pending') documentStatusCounts.pending++;
+        const status = doc.status?.toLowerCase() || '';
+        if (status === 'processed') documentStatusCounts.processed++;
+        else if (status === 'pending') documentStatusCounts.pending++;
         else documentStatusCounts.failed++;
       });
     }
@@ -612,8 +636,7 @@ export const getReportsData = () => {
   const lineDistribution = linesOfBusiness.map(line => {
     const count = mockSubmissions.filter(sub => {
       const detail = getMockSubmissionDetail(sub.submissionId);
-      // Fix: Handle possible undefined values with optional chaining and conditional check
-      return detail?.coverage?.lines && detail.coverage.lines.includes(line) || false;
+      return detail?.coverage?.lines?.includes(line) || false; // Fixed TypeScript error with optional chaining
     }).length;
     
     return {
@@ -646,9 +669,10 @@ export const getReportsData = () => {
   
   // 7. Submission Trend Data (last 14 days)
   const trendData = [];
+  const now = new Date();
   
   for (let i = 13; i >= 0; i--) {
-    const date = new Date();
+    const date = new Date(now);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
     
@@ -681,7 +705,7 @@ const mockDataExports = {
   getMockSubmissionDetail,
   getMockAuditComplianceStatus,
   getMockComplianceMetrics,
-  getReportsData
+  getReportsData // Export the getReportsData function
 };
 
 export default mockDataExports;
